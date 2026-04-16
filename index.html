@@ -31,6 +31,12 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
+    /* Кастомный тонкий скроллбар для внутренних блоков */
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 10px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+    
     /* Стили для корректной печати */
     @media print {
       body, #app, main { 
@@ -81,6 +87,261 @@
 
     window.addEventListener('unhandledrejection', function(event) {
       showErrorUI(event.reason.message || "Неизвестная ошибка.");
+    });
+
+    // --- 14 ШАБЛОНОВ ---
+    const TEMPLATES = [
+      {
+        id:"t1", name:"Социальный институт",
+        skeleton: [
+          {t:"1. Понятие / определение [института]", hl:false},
+          {t:"2. Признаки [института]:", hl:false},
+          {t:"   а) …; б) …; в) … (обычно 3–4)", hl:false},
+          {t:"3. Структура / элементы [института]:", hl:false},
+          {t:"   а) …; б) …; в) …", hl:false},
+          {t:"4. Виды / типы / классификации:", hl:false},
+          {t:"   а) …; б) …; в) …", hl:false},
+          {t:"5. Функции [института]:", hl:true},
+          {t:"   ★ УНИВЕРСАЛЬНЫЕ (подходят к любому!):", hl:true},
+          {t:"   а) социализации; б) интегративная; в) регулятивная; г) познавательная; д) коммуникативная", hl:true},
+          {t:"   + СПЕЦИФИЧЕСКИЕ для конкретного института", hl:false},
+          {t:"6. Роль в обществе / тенденции развития", hl:false},
+        ],
+        plans: [{nums:"№12"},{nums:"№24"},{nums:"№25"},{nums:"№26"},{nums:"№22"},{nums:"№23"},{nums:"№27"},{nums:"№75"},{nums:"№85"},{nums:"№86"},{nums:"№87"},{nums:"№102"},{nums:"№107"},{nums:"№108"}],
+        tip: "Функции — ГЛАВНЫЙ обязательный пункт. 5 универсальных функций подходят к любому институту. Бери минимум 3 из 5 + добавляй 1–2 специфические."
+      },
+      {
+        id:"t2", name:"Деятельность / Познание",
+        skeleton: [
+          {t:"1. Особенности / характеристики [деятельности]:", hl:false},
+          {t:"   а) целенаправленность; б) осознанность; в) преобразовательный характер; г) социальный характер", hl:false},
+          {t:"2. Структура [деятельности]:", hl:true},
+          {t:"   а) субъект; б) объект; в) мотив; г) цель; д) средства; е) результат", hl:true},
+          {t:"3. Мотивы:", hl:true},
+          {t:"   а) потребности; б) интересы; в) убеждения", hl:true},
+          {t:"4. Виды / классификации:", hl:false},
+          {t:"   а) …; б) …; в) …", hl:false},
+          {t:"5. Результаты / значение", hl:false},
+        ],
+        plans: [{nums:"№1"},{nums:"№2"},{nums:"№3"},{nums:"№4"},{nums:"№5"},{nums:"№6"},{nums:"№7"},{nums:"№8"},{nums:"№9"},{nums:"№16"},{nums:"№84"}],
+        tip: "Структура деятельности (субъект→результат) — ДОСЛОВНО одинаковая в №2, 5, 6. Мотивы (потребности/интересы/убеждения) — тоже. Виды потребностей (биол./соц./дух.) — в №1, 2, 5. Этапы познания — в №7, 8."
+      },
+      {
+        id:"t3", name:"Культура / Духовная сфера",
+        skeleton: [
+          {t:"1. Области / формы [культуры]:", hl:false},
+          {t:"   а) наука; б) мораль; в) религия; г) искусство", hl:false},
+          {t:"2. Виды [культуры]:", hl:true},
+          {t:"   а) народная; б) массовая; в) элитарная", hl:true},
+          {t:"3. Функции:", hl:true},
+          {t:"   а) нормативная; б) социализации; в) интегративная; г) коммуникативная", hl:true},
+          {t:"4. Духовные ценности российского общества:", hl:true},
+          {t:"   а) патриотизм; б) гуманизм; в) крепкая семья; г) историческая память", hl:true},
+          {t:"5. Институты / организации", hl:false},
+        ],
+        plans: [{nums:"№17"},{nums:"№18"},{nums:"№19"},{nums:"№20–21"}],
+        tip: "Виды культуры (народная/массовая/элитарная) — в №17, 18, 27. Духовные ценности РФ — дословно в №16, 17, 18. Функции культуры — из универсальных."
+      },
+      {
+        id:"t4", name:"Общество как система",
+        skeleton: [
+          {t:"1. Особенности общества как системы:", hl:false},
+          {t:"   а) саморазвитие; б) взаимосвязь элементов; в) возникновение/исчезновение элементов", hl:false},
+          {t:"2. Направления развития: а) прогресс; б) регресс", hl:false},
+          {t:"3. Формы изменений: а) реформа; б) революция", hl:false},
+          {t:"4. Типы обществ: а) традиционное; б) индустриальное; в) постиндустриальное", hl:true},
+          {t:"5. Сферы: а) экономическая; б) политическая; в) социальная; г) духовная", hl:true},
+          {t:"6. Критерии прогресса / глобальные проблемы", hl:false},
+        ],
+        plans: [{nums:"№10"},{nums:"№11"},{nums:"№13"},{nums:"№14"},{nums:"№15"}],
+        tip: "Типы обществ с признаками — в №13. Глобализация и экология — шаблон «Негативный процесс»: Причины → Последствия (+/−) → Меры."
+      },
+      {
+        id:"t5", name:"Негативный процесс / Проблема",
+        skeleton: [
+          {t:"1. Понятие [явления]", hl:false},
+          {t:"2. Причины:", hl:false},
+          {t:"   а) …; б) …; в) …", hl:false},
+          {t:"3. Виды / формы / классификации:", hl:false},
+          {t:"   а) …; б) …; в) …", hl:false},
+          {t:"4. Негативные последствия / проявления:", hl:true},
+          {t:"   а) …; б) …; в) …", hl:false},
+          {t:"5. Позитивные последствия (если есть):", hl:false},
+          {t:"   а) …; б) …; в) …", hl:false},
+          {t:"6. Меры / способы решения / политика государства:", hl:true},
+          {t:"   а) …; б) …; в) …", hl:false},
+        ],
+        plans: [{nums:"№14"},{nums:"№15"},{nums:"№55"},{nums:"№63"},{nums:"№70"},{nums:"№80"},{nums:"№81"}],
+        tip: "Универсальная логика: Причины → Виды → Последствия → Меры. Для глобальных проблем (№14, 15): добавь «признаки глобальных проблем» (угроза всему, мировой масштаб, совместные усилия)."
+      },
+      {
+        id:"t6", name:"Рыночный механизм",
+        skeleton: [
+          {t:"1. Понятие рынка / факторы производства", hl:false},
+          {t:"2. Функции рынка:", hl:true},
+          {t:"   а) ценообразующая; б) информационная; в) регулирующая; г) посредническая; д) санирующая", hl:true},
+          {t:"3. Виды рынков (по объекту / масштабу / конкуренции)", hl:false},
+          {t:"4. Неценовые факторы спроса / предложения", hl:false},
+          {t:"5. Закон спроса/предложения, равновесная цена", hl:false},
+          {t:"6. Виды конкуренции:", hl:true},
+          {t:"   а) совершенная; б) монополистическая; в) олигополия; г) монополия", hl:true},
+          {t:"7. Несовершенства рынка / роль государства", hl:false},
+        ],
+        plans: [{nums:"№34–35"},{nums:"№36–37"},{nums:"№38–39"},{nums:"№40–42"},{nums:"№43–46"}],
+        tip: "Факторы пр-ва (труд/капитал/земля/предпр.) + факторные доходы (зарплата/процент/рента/прибыль) — пара, которая повторяется. Неценовые факторы спроса и предложения — стандартные наборы."
+      },
+      {
+        id:"t7", name:"Деньги / Банки / Финансы",
+        skeleton: [
+          {t:"1. Понятие / функции денег:", hl:false},
+          {t:"   а) мера стоимости; б) средство обращения; в) средство накопления; г) средство платежа; д) мировые деньги", hl:true},
+          {t:"2. Виды (наличные/безналичные, товарные/кредитные…)", hl:false},
+          {t:"3. Банковская система:", hl:false},
+          {t:"   а) ЦБ; б) коммерческие банки", hl:false},
+          {t:"4. Функции ЦБ: а) эмиссия; б) ключевая ставка; в) золотовалютные резервы; г) лицензирование", hl:true},
+          {t:"5. Инструменты монетарной политики:", hl:true},
+          {t:"   а) ключевая ставка; б) норма обязательных резервов; в) операции на открытом рынке", hl:true},
+          {t:"6. Принципы кредитования: а) срочность; б) возвратность; в) платность", hl:true},
+        ],
+        plans: [{nums:"№47–48"},{nums:"№49–51"},{nums:"№52"},{nums:"№53–54"}],
+        tip: "Инструменты ЦБ (3 штуки) — дословно в №52, 57. Принципы кредитования (3 штуки) — в №53, 54. Функции денег (5 штук) — в №47, 48."
+      },
+      {
+        id:"t8", name:"Государственная экономическая политика",
+        skeleton: [
+          {t:"1. Экономические функции государства:", hl:true},
+          {t:"   а) правовое регулирование; б) защита конкуренции; в) производство общ. благ; г) стабилизация", hl:true},
+          {t:"2. Методы: а) прямые; б) косвенные (монетарная + фискальная)", hl:false},
+          {t:"3. Инструменты фискальной политики:", hl:true},
+          {t:"   а) изменение гос. расходов; б) изменение ставок налогов", hl:true},
+          {t:"4. Виды налогов:", hl:true},
+          {t:"   а) по уровню (федеральные/региональные/местные); б) по способу (прямые/косвенные)", hl:true},
+          {t:"5. Направления: а) стимулирующая; б) сдерживающая", hl:false},
+          {t:"6. Государственный бюджет:", hl:false},
+          {t:"   а) доходы; б) расходы; в) виды: сбалансированный/дефицитный/профицитный", hl:false},
+        ],
+        plans: [{nums:"№28"},{nums:"№29"},{nums:"№30"},{nums:"№31"},{nums:"№32–33"},{nums:"№56–57"},{nums:"№58"},{nums:"№59"},{nums:"№60–61"},{nums:"№62"},{nums:"№64–66"}],
+        tip: "Инструменты фискальной (2 шт.) — дословно в №57, 61. Виды налогов (3 классификации) — в №60, 61. Функции государства — в №56, 57."
+      },
+      {
+        id:"t9", name:"Социальная структура / Стратификация",
+        skeleton: [
+          {t:"1. Понятие [явления]", hl:false},
+          {t:"2. Критерии стратификации:", hl:true},
+          {t:"   а) доходы; б) власть; в) престиж профессии; г) уровень образования", hl:true},
+          {t:"3. Виды / типы", hl:false},
+          {t:"4. Виды мобильности:", hl:true},
+          {t:"   а) вертикальная (↑ и ↓); б) горизонтальная", hl:true},
+          {t:"5. Социальные лифты: а) образование; б) армия; в) брак; г) бизнес", hl:false},
+          {t:"6. Позитивное / негативное влияние", hl:false},
+        ],
+        plans: [{nums:"№67–68"},{nums:"№69"},{nums:"№70–71"},{nums:"№72"},{nums:"№73–74"},{nums:"№75–76"},{nums:"№77"},{nums:"№78–79"},{nums:"№80"},{nums:"№81"},{nums:"№82"}],
+        tip: "Весь блок 3 укладывается в этот шаблон + «Негативный процесс» (для №80, 81). Функции семьи — СПЕЦИФИЧЕСКИЕ (репродуктивная, воспитательная, хоз.-экономическая...)."
+      },
+      {
+        id:"t10", name:"Форма государства / Режим / Демократия",
+        skeleton: [
+          {t:"1. Элементы формы государства:", hl:false},
+          {t:"   а) форма правления; б) территориальное устройство; в) политический режим", hl:false},
+          {t:"2. Форма правления: Монархия vs Республика", hl:false},
+          {t:"3. Устройство: а) унитарное; б) федерация; в) конфедерация", hl:false},
+          {t:"4. Режимы: а) демократический; б) авторитарный; в) тоталитарный", hl:false},
+          {t:"5. Признаки демократии:", hl:true},
+          {t:"   а) народовластие; б) плюрализм; в) оппозиция; г) права человека; д) свободные выборы", hl:true},
+          {t:"6. Признаки правового государства:", hl:true},
+          {t:"   а) верховенство права; б) разделение властей; в) гарантии прав; г) взаимная ответственность", hl:true},
+          {t:"7. Признаки гражданского общества:", hl:true},
+          {t:"   а) частные интересы; б) самостоятельность граждан; в) добровольность", hl:true},
+        ],
+        plans: [{nums:"№83"},{nums:"№84"},{nums:"№85–87"},{nums:"№88"},{nums:"№89"},{nums:"№90"},{nums:"№91"},{nums:"№92"},{nums:"№93"},{nums:"№98–99"},{nums:"№100–105"},{nums:"№101"},{nums:"№106"}],
+        tip: "Признаки демократии, правового гос-ва и гражд. общества — дословно совпадают в №90, 91, 92, 178. Формы полит. участия — дословно в №98, 99, 100. Принципы выборов (6 шт.) — в №100, 103, 104, 105."
+      },
+      {
+        id:"t11", name:"Орган власти РФ",
+        skeleton: [
+          {t:"1. [Орган] как [высший орган ... власти]", hl:false},
+          {t:"2. Правовой статус / особенности:", hl:false},
+          {t:"3. Порядок формирования / требования:", hl:false},
+          {t:"4. Структура (палаты / подразделения):", hl:false},
+          {t:"5. Полномочия / предметы ведения:", hl:true},
+          {t:"   а) …; б) …; в) …; г) …", hl:false},
+          {t:"6. Прекращение полномочий / отставка:", hl:false},
+          {t:"   а) по истечении срока; б) по инициативе; в) по отрешению", hl:false},
+        ],
+        plans: [{nums:"№94"},{nums:"№95"},{nums:"№96"},{nums:"№97"},{nums:"№146"},{nums:"№149"}],
+        tip: "Все 5 органов строятся ИДЕНТИЧНО. Правовой статус Президента дословно совпадает в №94, 95. Структура ФС (ГД + СФ) — в №94, 96."
+      },
+      {
+        id:"t12", name:"Процессуальное право",
+        skeleton: [
+          {t:"1. Особенности [вида] судопроизводства", hl:false},
+          {t:"2. Принципы:", hl:true},
+          {t:"   ★ УНИВЕРСАЛЬНЫЕ (одинаковые для всех 5!):", hl:true},
+          {t:"   а) независимость судей; б) состязательность и равноправие сторон; в) законность", hl:true},
+          {t:"3. Участники / стороны:", hl:true},
+          {t:"   Гражданский: истец + ответчик", hl:false},
+          {t:"   Уголовный: обвинение + защита + суд + содействующие", hl:false},
+          {t:"4. Стадии:", hl:true},
+          {t:"   ★ УНИВЕРСАЛЬНЫЕ: возбуждение → подготовка → рассмотрение → решение → обжалование", hl:true},
+          {t:"5. Меры процессуального принуждения (для уголовного):", hl:false},
+        ],
+        plans: [{nums:"№143"},{nums:"№144"},{nums:"№145"},{nums:"№146"},{nums:"№147"}],
+        tip: "САМЫЙ ЧЁТКИЙ ШАБЛОН. Все 5 процессов строятся ИДЕНТИЧНО. Выучи уголовный — остальные 4 разложатся за минуты."
+      },
+      {
+        id:"t13", name:"Материальная отрасль права",
+        skeleton: [
+          {t:"1. Особенности [отрасли] права:", hl:false},
+          {t:"   а) предмет регулирования; б) источник (кодекс); в) субъекты", hl:false},
+          {t:"2. Принципы:", hl:false},
+          {t:"   а) законность; б) равенство перед законом; в) справедливость; г) гуманизм", hl:true},
+          {t:"3. Признаки правонарушения:", hl:true},
+          {t:"   а) противоправность; б) виновность; в) общественная опасность; г) наказуемость", hl:true},
+          {t:"4. Состав правонарушения:", hl:true},
+          {t:"   а) субъект; б) объект; в) объективная сторона; г) субъективная сторона", hl:true},
+          {t:"5. Виды наказаний / ответственность:", hl:false},
+        ],
+        plans: [{nums:"№109"},{nums:"№110"},{nums:"№111"},{nums:"№112"},{nums:"№113"},{nums:"№114"},{nums:"№115–116"},{nums:"№117–120"},{nums:"№140"},{nums:"№141"},{nums:"№142"},{nums:"№148"}],
+        tip: "Признаки правонарушения и состав — ИДЕНТИЧНЫ в №113 (общие), №140 (адм.), №142 (угол.). Принципы — тоже."
+      },
+      {
+        id:"t14", name:"Договор + Права/Обязанности субъекта",
+        skeleton: [
+          {t:"— ЧАСТЬ А: ДОГОВОР —", hl:true},
+          {t:"1. Стороны [договора]: а) …; б) …", hl:false},
+          {t:"2. Содержание / условия:", hl:false},
+          {t:"3. Виды: а) …; б) …", hl:false},
+          {t:"4. Основания прекращения:", hl:true},
+          {t:"   а) по инициативе [стороны 1]; б) по инициативе [стороны 2]; в) по иным обстоятельствам", hl:true},
+          {t:"— ЧАСТЬ Б: ПРАВА И ОБЯЗАННОСТИ —", hl:true},
+          {t:"1. Права [субъекта]: а) …; б) …; в) …", hl:false},
+          {t:"2. Обязанности [субъекта]: а) …; б) …", hl:false},
+          {t:"3. Способы защиты прав:", hl:true},
+          {t:"   а) самозащита; б) профсоюзы; в) гос. контроль; г) суд", hl:true},
+          {t:"— ЛЕСЕНКА ДЕЕСПОСОБНОСТИ (для несовершеннолетних) —", hl:true},
+          {t:"   0→6→14→16→18 лет + эмансипация", hl:true},
+        ],
+        plans: [{nums:"№121–123"},{nums:"№124–125"},{nums:"№126–128"},{nums:"№129–130"},{nums:"№131–132"},{nums:"№133"},{nums:"№134"},{nums:"№135–136"},{nums:"№137"},{nums:"№138"},{nums:"№139"},{nums:"№178"},{nums:"№179"},{nums:"№180"}],
+        tip: "Самый массовый шаблон. Стороны труд. правоотношений (работник/работодатель) — в №135, 136, 137. Прекращение трудового договора — в №135, 136. Лесенка дееспособности — в №129, 130, 134, 180."
+      }
+    ];
+
+    // АВТОМАТИЧЕСКИЙ МАППИНГ ID ПЛАНА -> ID ШАБЛОНА
+    const PLAN_TO_TEMPLATE = {};
+    TEMPLATES.forEach(t => {
+      t.plans.forEach(p => {
+        const rangeMatch = p.nums.match(/№(\d+)[–-](\d+)/); // Ищем диапазон (например, №24-25)
+        if (rangeMatch) {
+          for (let i = parseInt(rangeMatch[1]); i <= parseInt(rangeMatch[2]); i++) {
+             if (!PLAN_TO_TEMPLATE[i]) PLAN_TO_TEMPLATE[i] = t.id;
+          }
+        } else {
+          const singleMatch = p.nums.match(/№(\d+)/); // Ищем одно число (например, №12)
+          if (singleMatch) {
+             if (!PLAN_TO_TEMPLATE[parseInt(singleMatch[1])]) PLAN_TO_TEMPLATE[parseInt(singleMatch[1])] = t.id;
+          }
+        }
+      });
     });
 
     async function bootstrap() {
@@ -206,35 +467,54 @@
             const refWords = normalizeText(refPoint.text);
             let bestMatch = null;
             let bestScore = 0;
+            let bestSubpointsMatchCount = 0;
+            let bestSubpointMatches = refPoint.subpoints.map(sp => ({ text: sp, matched: false }));
             
             userParsed.forEach(userPoint => {
               const userWords = normalizeText(userPoint.text);
               const score = jaccardIndex(refWords, userWords);
-              if (score > bestScore) {
+              
+              let currentSubpointMatches = [];
+              let currentSubpointMatchCount = 0;
+              
+              refPoint.subpoints.forEach(refSub => {
+                const refSubWords = normalizeText(refSub);
+                let isSubMatched = false;
+                if (!ignoreSubpoints) {
+                  userPoint.subpoints.forEach(userSub => {
+                    if (jaccardIndex(refSubWords, normalizeText(userSub)) >= THRESHOLD) isSubMatched = true;
+                  });
+                }
+                currentSubpointMatches.push({ text: refSub, matched: isSubMatched });
+                if (isSubMatched) currentSubpointMatchCount++;
+              });
+
+              if (currentSubpointMatchCount > bestSubpointsMatchCount || 
+                 (currentSubpointMatchCount === bestSubpointsMatchCount && score > bestScore)) {
                 bestScore = score;
                 bestMatch = userPoint;
+                bestSubpointsMatchCount = currentSubpointMatchCount;
+                bestSubpointMatches = currentSubpointMatches;
               }
             });
 
-            const isPointMatched = bestScore >= THRESHOLD;
-            if (isPointMatched) scorePoints++;
+            let isPointMatched = bestScore >= THRESHOLD;
+            
+            if (!ignoreSubpoints && (bestSubpointsMatchCount >= 3 || (refPoint.subpoints.length > 0 && bestSubpointsMatchCount === refPoint.subpoints.length))) {
+              isPointMatched = true;
+            }
 
-            const subpointMatches = refPoint.subpoints.map(refSub => {
-              const refSubWords = normalizeText(refSub);
-              let isSubMatched = false;
-              if (isPointMatched && bestMatch && !ignoreSubpoints) {
-                bestMatch.subpoints.forEach(userSub => {
-                  if (jaccardIndex(refSubWords, normalizeText(userSub)) >= THRESHOLD) isSubMatched = true;
-                });
-              }
-              if (isSubMatched && !ignoreSubpoints) scoreSubpoints++;
-              return { text: refSub, matched: isSubMatched };
-            });
+            if (isPointMatched) {
+              scorePoints++;
+              if (!ignoreSubpoints) scoreSubpoints += bestSubpointsMatchCount;
+            } else {
+              if (!ignoreSubpoints) bestSubpointMatches = bestSubpointMatches.map(sp => ({...sp, matched: false}));
+            }
 
             return {
               text: refPoint.text,
               matched: isPointMatched,
-              subpoints: subpointMatches,
+              subpoints: bestSubpointMatches,
               userTextMatched: isPointMatched ? bestMatch?.text : null
             };
           });
@@ -268,6 +548,16 @@
           return baseDate.toISOString().split('T')[0];
         };
 
+        function formatTime(seconds) {
+            if (!seconds || seconds <= 0) return '0 мин';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            if (h > 0 && m > 0) return `${h} ч ${m} мин`;
+            if (h > 0) return `${h} ч`;
+            if (m > 0) return `${m} мин`;
+            return `< 1 мин`;
+        }
+
         // --- 5. ГЛОБАЛЬНОЕ СОСТОЯНИЕ ---
         const state = {
           view: 'dashboard',
@@ -279,11 +569,14 @@
           userDraft: '',
           comparisonResult: null,
           modeSelectorId: null,
+          expandedTemplate: null, // Для аккордеона во вкладке Шаблоны
+          viewTemplateModal: null, // Для модалки со скелетом в режиме Изучения
           blanksData: [],
           timeLeft: 60,
           timerRef: null,
           progress: JSON.parse(localStorage.getItem('ege_plan_progress') || '{}'),
-          streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}')
+          streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}'),
+          timeStats: JSON.parse(localStorage.getItem('ege_plan_time_stats') || '{}')
         };
 
         // --- 6. РАБОТА С FIREBASE И КЭШЕМ ---
@@ -294,10 +587,10 @@
             const snap = await getDoc(docRef);
             if (snap.exists()) {
               const data = snap.data();
+              
               const cloudProgress = data.progress || {};
               const localProgress = state.progress || {};
               const mergedProgress = { ...cloudProgress };
-              
               for (const key in localProgress) {
                  if (!mergedProgress[key] || localProgress[key].bestScore >= mergedProgress[key].bestScore) {
                     mergedProgress[key] = localProgress[key];
@@ -310,6 +603,15 @@
               const localStreak = state.streak || { count: 0, lastActive: null };
               state.streak = localStreak.count > cloudStreak.count ? localStreak : cloudStreak;
               localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
+
+              const cloudTime = data.timeStats || {};
+              const localTime = state.timeStats || {};
+              const mergedTime = { ...cloudTime };
+              for (const key in localTime) {
+                  mergedTime[key] = Math.max(localTime[key] || 0, mergedTime[key] || 0);
+              }
+              state.timeStats = mergedTime;
+              localStorage.setItem('ege_plan_time_stats', JSON.stringify(state.timeStats));
 
               saveProgressToCloud();
             } else {
@@ -324,7 +626,8 @@
             const docRef = doc(db, 'users', currentUser.uid);
             setDoc(docRef, {
               progress: state.progress,
-              streak: state.streak
+              streak: state.streak,
+              timeStats: state.timeStats
             }, { merge: true }).catch(err => console.error(err));
           } catch (e) { console.error(e); }
         }
@@ -397,17 +700,26 @@
           },
 
           logout: async () => { await signOut(auth); },
-          setView: (v) => { window.scrollTo(0,0); state.view = v; render(); },
+          
+          setView: (v) => { 
+            if (['study', 'training', 'training_blanks', 'blitz'].includes(state.view) && !['study', 'training', 'training_blanks', 'blitz'].includes(v)) {
+              localStorage.setItem('ege_plan_time_stats', JSON.stringify(state.timeStats));
+              saveProgressToCloud();
+            }
+            window.scrollTo(0,0); 
+            state.view = v; 
+            render(); 
+          },
           
           setSearch: (v) => { 
             state.searchQuery = v; 
-            document.getElementById('catalog-grid').innerHTML = generateCatalogGrid(); 
+            const grid = document.getElementById('catalog-grid');
+            if (grid) grid.innerHTML = generateCatalogGrid(); 
           },
 
           setBlock: (b) => {
             state.selectedBlock = b;
-            document.getElementById('block-filters').innerHTML = generateBlockFilters();
-            document.getElementById('catalog-grid').innerHTML = generateCatalogGrid();
+            render();
           },
 
           updateDraft: (val) => {
@@ -430,6 +742,53 @@
                   actions.updateDraft(state.userDraft);
               }
             }
+          },
+
+          studyRandomPlan: () => {
+            let pool = PLANS_DB;
+            if (state.selectedBlock !== 'all') {
+              pool = pool.filter(p => p.section === state.selectedBlock);
+            }
+            if (pool.length === 0) pool = PLANS_DB;
+            
+            let unmastered = pool.filter(p => !state.progress[p.id] || state.progress[p.id].status !== 'mastered');
+            if (unmastered.length === 0) unmastered = pool;
+            
+            const randomPlan = unmastered[Math.floor(Math.random() * unmastered.length)];
+            if (randomPlan) {
+              actions.openModal(randomPlan.id);
+            }
+          },
+
+          // Новые функции для работы с ШАБЛОНАМИ
+          toggleTemplate: (id) => {
+            state.expandedTemplate = state.expandedTemplate === id ? null : id;
+            render();
+          },
+
+          openTemplateModal: (id) => {
+            state.viewTemplateModal = id;
+            render();
+          },
+          
+          closeTemplateModal: () => {
+            state.viewTemplateModal = null;
+            render();
+          },
+
+          studyRandomPlanFromTemplate: (templateId) => {
+             const validIds = Object.keys(PLAN_TO_TEMPLATE).filter(id => PLAN_TO_TEMPLATE[id] === templateId).map(Number);
+             let pool = PLANS_DB.filter(p => validIds.includes(p.id));
+
+             if (pool.length === 0) return;
+
+             let unmastered = pool.filter(p => !state.progress[p.id] || state.progress[p.id].status !== 'mastered');
+             if (unmastered.length === 0) unmastered = pool;
+
+             const randomPlan = unmastered[Math.floor(Math.random() * unmastered.length)];
+             if (randomPlan) {
+               actions.openModal(randomPlan.id);
+             }
           },
 
           startTraining: (id, mode = 'classic') => {
@@ -469,8 +828,13 @@
           },
 
           startBlitz: () => {
-            if(PLANS_DB.length === 0) return;
-            const randomPlan = PLANS_DB[Math.floor(Math.random() * PLANS_DB.length)];
+            let pool = PLANS_DB;
+            if (state.selectedBlock !== 'all') {
+              pool = pool.filter(p => p.section === state.selectedBlock);
+            }
+            if (pool.length === 0) pool = PLANS_DB;
+
+            const randomPlan = pool[Math.floor(Math.random() * pool.length)];
             state.selectedPlanId = randomPlan.id;
             state.userDraft = '';
             state.comparisonResult = null;
@@ -599,7 +963,6 @@
 
             try {
               const target = document.getElementById('screenshot-target');
-              
               const clone = target.cloneNode(true);
               clone.style.position = 'absolute';
               clone.style.left = '-9999px';
@@ -689,29 +1052,33 @@
           }
 
           return `
-            <header class="bg-white border-b border-[#E8E4DF] shrink-0 print-hidden shadow-sm">
-              <div class="max-w-[1200px] w-full mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
+            <header class="bg-white border-b border-[#E8E4DF] shrink-0 print-hidden shadow-sm overflow-x-auto no-scrollbar">
+              <div class="max-w-[1200px] w-full mx-auto px-4 md:px-6 h-16 flex items-center justify-between min-w-[max-content]">
                 <div class="flex items-center gap-4 md:gap-6">
                   <div class="flex items-center gap-2 cursor-pointer shrink-0" onclick="actions.setView('dashboard')">
                     <div class="bg-[#4A90D9] p-1.5 rounded-lg text-white">
                       <i class="ph ph-book-open text-xl"></i>
                     </div>
-                    <h1 class="font-bold text-xl tracking-tight hidden sm:block">Plan Master</h1>
+                    <h1 class="font-bold text-xl tracking-tight hidden lg:block">Plan Master</h1>
                   </div>
                   
                   <nav class="flex items-center gap-1 bg-[#FAF7F2] p-1 rounded-xl border border-[#E8E4DF]">
                     <button onclick="actions.setView('dashboard')" class="px-2 md:px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'dashboard' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
-                      <i class="ph-fill ph-house text-xl md:text-lg"></i> <span class="hidden md:inline">Дашборд</span>
+                      <i class="ph-fill ph-house text-xl md:text-lg"></i> <span class="hidden sm:inline">Дашборд</span>
+                    </button>
+                    <!-- НОВАЯ ВКЛАДКА ШАБЛОНЫ -->
+                    <button onclick="actions.setView('templates')" class="px-2 md:px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'templates' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
+                      <i class="ph-fill ph-squares-four text-xl md:text-lg"></i> <span class="hidden sm:inline">Шаблоны</span>
                     </button>
                     <button onclick="actions.setView('catalog')" class="px-2 md:px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'catalog' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
-                      <i class="ph-fill ph-books text-xl md:text-lg"></i> <span class="hidden md:inline">Каталог</span>
+                      <i class="ph-fill ph-books text-xl md:text-lg"></i> <span class="hidden sm:inline">Каталог</span>
                     </button>
                     <button onclick="actions.setView('statistics')" class="px-2 md:px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'statistics' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
-                      <i class="ph-fill ph-chart-pie-slice text-xl md:text-lg"></i> <span class="hidden md:inline">Статистика</span>
+                      <i class="ph-fill ph-chart-pie-slice text-xl md:text-lg"></i> <span class="hidden sm:inline">Статистика</span>
                     </button>
                   </nav>
                 </div>
-                <div class="flex items-center gap-2 md:gap-4 text-sm font-medium shrink-0">
+                <div class="flex items-center gap-2 md:gap-4 text-sm font-medium shrink-0 ml-4">
                   <div class="flex items-center gap-1 bg-[#FFF0E5] text-[#F5A623] px-2 md:px-3 py-1.5 rounded-lg font-bold" title="Серия дней">
                     <i class="ph-fill ph-fire text-lg ${state.streak.count > 0 ? 'text-[#F5A623]' : 'text-gray-300'}"></i> ${state.streak.count}
                   </div>
@@ -721,6 +1088,15 @@
             </header>
           `;
         }
+
+        // Вспомогательная функция для рендера скелета шаблона
+        const renderSkeleton = (template) => {
+          return template.skeleton.map(s => `
+            <div class="font-mono text-[13px] md:text-[14px] leading-relaxed py-0.5 ${s.hl ? 'text-[#E74C3C] font-bold bg-red-50/50 px-2 -mx-2 rounded' : 'text-[#7A7570]'}">
+               ${s.t}
+            </div>
+          `).join('');
+        };
 
         window.generateBlockFilters = function() {
           return UNIQUE_BLOCKS.map(b => {
@@ -837,7 +1213,7 @@
                 <div class="col-span-full bg-white rounded-2xl border border-[#E8E4DF] p-6 text-center text-[#7A7570] shadow-sm">
                   <i class="ph-fill ph-check-circle text-4xl mx-auto mb-2 text-[#5CB85C] opacity-50 block"></i>
                   <p class="font-bold text-sm md:text-base text-[#2D2A26]">На сегодня нет планов для повторения!</p>
-                  <p class="mt-1 text-sm">Вы молодец. Можете взять новые темы из каталога.</p>
+                  <p class="mt-1 text-sm">Вы молодец. Выберите любую тему для изучения ниже.</p>
                 </div>`;
             }
 
@@ -845,25 +1221,32 @@
               <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
                 <div class="shrink-0 mb-4 md:mb-5">
                   <h2 class="text-2xl md:text-3xl font-bold mb-1">С возвращением! 👋</h2>
-                  <p class="text-[#7A7570] text-sm md:text-base">Ваша статистика и планы на сегодня.</p>
+                  <p class="text-[#7A7570] text-sm md:text-base">Выберите раздел и начните изучение.</p>
                 </div>
                 
+                <div id="block-filters" class="shrink-0 flex overflow-x-auto gap-2 pb-2 mb-4 no-scrollbar">
+                  ${window.generateBlockFilters()}
+                </div>
+
                 <div class="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-5">
                   <div class="bg-white p-3 rounded-2xl border border-[#E8E4DF] shadow-sm flex flex-col items-center justify-center text-center">
                     <i class="ph-fill ph-chart-bar text-2xl md:text-3xl text-[#4A90D9] mb-1"></i>
                     <span class="text-2xl md:text-3xl font-black text-[#2D2A26] leading-none mb-1">${Object.keys(state.progress).length}</span>
                     <span class="text-[10px] md:text-[11px] font-bold text-[#7A7570] uppercase tracking-wider">Изучено</span>
                   </div>
-                  <div class="bg-white p-3 rounded-2xl border border-[#E8E4DF] shadow-sm flex flex-col items-center justify-center text-center">
-                    <i class="ph-fill ph-medal text-2xl md:text-3xl text-[#5CB85C] mb-1"></i>
-                    <span class="text-2xl md:text-3xl font-black text-[#2D2A26] leading-none mb-1">${Object.values(state.progress).filter(p => p.status === 'mastered').length}</span>
-                    <span class="text-[10px] md:text-[11px] font-bold text-[#7A7570] uppercase tracking-wider">Идеально</span>
-                  </div>
+                  
+                  <button onclick="actions.studyRandomPlan()" class="bg-white p-3 rounded-2xl border border-[#E8E4DF] shadow-sm flex flex-col items-center justify-center text-center hover:border-[#5CB85C] hover:shadow-md transition-all group active:scale-95">
+                    <i class="ph-fill ph-student text-2xl md:text-3xl text-[#5CB85C] mb-1 group-hover:scale-110 transition-transform"></i>
+                    <span class="text-xl md:text-2xl font-black text-[#2D2A26] leading-none mb-1 mt-1">Учить</span>
+                    <span class="text-[9px] md:text-[10px] font-bold text-[#7A7570] uppercase tracking-wider mt-1">Случайный план</span>
+                  </button>
+
                   <div class="bg-white p-3 rounded-2xl border border-[#E8E4DF] shadow-sm flex flex-col items-center justify-center text-center border-b-4 border-b-[#F5A623]">
                     <i class="ph-fill ph-fire text-2xl md:text-3xl text-[#F5A623] mb-1"></i>
                     <span class="text-2xl md:text-3xl font-black text-[#2D2A26] leading-none mb-1">${state.streak.count} дн.</span>
                     <span class="text-[10px] md:text-[11px] font-bold text-[#7A7570] uppercase tracking-wider">Ударный режим</span>
                   </div>
+                  
                   <button onclick="actions.startBlitz()" class="bg-gradient-to-br from-[#4A90D9] to-[#8E54E9] p-3 rounded-2xl text-white shadow-md hover:shadow-lg transition-all flex flex-col items-center justify-center group active:scale-95 border-b-4 border-b-[#7a42d4]">
                     <i class="ph-fill ph-lightning text-3xl md:text-4xl text-[#F5A623] mb-1 group-hover:scale-110 transition-transform"></i>
                     <span class="font-bold text-[12px] md:text-sm uppercase tracking-wide">Блиц-тест</span>
@@ -875,8 +1258,62 @@
                   <h3 class="text-lg md:text-xl font-bold">План на сегодня</h3>
                 </div>
                 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                  ${reviewCards}
+                <div class="flex-grow overflow-y-auto custom-scroll pr-1 md:pr-2 pb-6">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                    ${reviewCards}
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+
+          // НОВЫЙ БЛОК: ШАБЛОНЫ
+          if (state.view === 'templates') {
+            return `
+              <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
+                <div class="shrink-0 mb-4 md:mb-5">
+                  <h2 class="text-2xl md:text-3xl font-bold mb-1">14 Шаблонов ФИПИ</h2>
+                  <p class="text-[#7A7570] text-sm md:text-base">Пойми логику построения, чтобы не зубрить каждый план с нуля.</p>
+                </div>
+                
+                <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 text-sm text-[#4A90D9]">
+                  <b>💡 Секрет:</b> Все 180 планов состоят из этих 14 каркасов. Жёлтым и красным цветом выделены универсальные пункты, которые подходят ко всей группе планов.
+                </div>
+
+                <div class="space-y-4">
+                  ${TEMPLATES.map((t, idx) => `
+                    <div class="bg-white rounded-2xl border ${state.expandedTemplate === t.id ? 'border-[#4A90D9]' : 'border-[#E8E4DF]'} shadow-sm overflow-hidden transition-all">
+                      <div class="p-4 md:p-5 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors" onclick="actions.toggleTemplate('${t.id}')">
+                        <div class="flex items-center gap-3">
+                          <div class="w-8 h-8 rounded-lg bg-[#4A90D9] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                            ${idx + 1}
+                          </div>
+                          <div>
+                            <h3 class="font-bold text-[#2D2A26] text-base md:text-lg">${t.name}</h3>
+                            <div class="text-xs text-[#7A7570] font-mono mt-0.5">Подходит для ${t.plans.length} планов</div>
+                          </div>
+                        </div>
+                        <i class="ph-bold ${state.expandedTemplate === t.id ? 'ph-caret-up' : 'ph-caret-down'} text-[#7A7570]"></i>
+                      </div>
+                      
+                      ${state.expandedTemplate === t.id ? `
+                        <div class="p-4 md:p-5 border-t border-[#E8E4DF] bg-[#FAF7F2]">
+                           <div class="mb-4">
+                             <div class="text-xs font-bold text-[#7A7570] uppercase tracking-wider mb-2">Структура (Скелет)</div>
+                             ${renderSkeleton(t)}
+                           </div>
+                           
+                           <div class="bg-yellow-50 text-yellow-800 p-4 rounded-xl border border-yellow-100 text-sm mb-4">
+                             <b>🧠 Подсказка:</b> ${t.tip}
+                           </div>
+
+                           <button onclick="actions.studyRandomPlanFromTemplate('${t.id}')" class="w-full bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                             <i class="ph-fill ph-student text-lg"></i> Тренировать случайный план по этому шаблону
+                           </button>
+                        </div>
+                      ` : ''}
+                    </div>
+                  `).join('')}
                 </div>
               </div>
             `;
@@ -900,8 +1337,10 @@
                   ${window.generateBlockFilters()}
                 </div>
 
-                <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-                  ${window.generateCatalogGrid()}
+                <div class="flex-grow overflow-y-auto custom-scroll pr-1 md:pr-2 pb-6">
+                  <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+                    ${window.generateCatalogGrid()}
+                  </div>
                 </div>
               </div>
             `;
@@ -909,6 +1348,25 @@
 
           if (state.view === 'study') {
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
+            
+            // ИНТЕГРАЦИЯ ШАБЛОНОВ (ПУНКТ 2)
+            const templateId = PLAN_TO_TEMPLATE[plan.id];
+            const template = templateId ? TEMPLATES.find(t => t.id === templateId) : null;
+
+            let templateBannerHTML = '';
+            if (template) {
+              templateBannerHTML = `
+                <div class="mb-5 bg-[#FFF9F0] p-4 rounded-2xl border border-[#F5A623]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+                  <div>
+                    <span class="text-[10px] font-bold text-[#F5A623] uppercase tracking-wider mb-1 block">Умная подготовка</span>
+                    <h3 class="font-bold text-sm md:text-base text-[#2D2A26] flex items-center gap-1.5"><i class="ph-fill ph-magic-wand text-[#F5A623]"></i> Этот план строится по шаблону: «${template.name}»</h3>
+                  </div>
+                  <button onclick="actions.openTemplateModal('${template.id}')" class="shrink-0 w-full sm:w-auto bg-white hover:bg-gray-50 border border-[#F5A623] text-[#F5A623] px-4 py-2 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+                    Посмотреть структуру
+                  </button>
+                </div>
+              `;
+            }
             
             const planContentHTML = plan.plan.points.map((p, idx) => `
               <div class="mb-3 break-inside-avoid">
@@ -931,6 +1389,9 @@
                 <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 font-medium transition-colors text-sm md:text-base self-start bg-white border border-[#E8E4DF] px-4 py-2 rounded-lg shadow-sm">
                   <i class="ph ph-arrow-left text-lg"></i> В каталог
                 </button>
+                
+                ${templateBannerHTML}
+
                 <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col">
                   <div class="shrink-0 p-4 md:p-5 border-b border-[#E8E4DF] bg-gray-50/50 rounded-t-2xl md:rounded-t-3xl">
                     <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#5CB85C] mb-1 flex items-center gap-1">
@@ -950,7 +1411,7 @@
                     </div>
                   </div>
 
-                  <div class="shrink-0 p-4 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3 rounded-b-2xl md:rounded-b-3xl">
+                  <div class="shrink-0 mt-auto p-4 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3 rounded-b-2xl md:rounded-b-3xl">
                     <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-puzzle-piece text-lg"></i> Заполнить пробелы
                     </button>
@@ -1020,13 +1481,13 @@
                     <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-[#F5A623] mb-1 flex items-center gap-1"><i class="ph-fill ph-puzzle-piece text-base"></i> Заполни пробелы</span>
                     <h2 class="text-lg md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
-                  <div class="p-4 md:p-6">
+                  <div class="flex-grow p-4 md:p-6">
                     <div class="mb-4 md:mb-6 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
                        Впишите термины по смыслу. Оценки выставляются лояльно (синонимы работают).
                     </div>
                     <div class="space-y-3 md:space-y-4 max-w-4xl mx-auto">${blanksHTML}</div>
                   </div>
-                  <div class="shrink-0 p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-end rounded-b-2xl md:rounded-b-3xl">
+                  <div class="shrink-0 mt-auto p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-end rounded-b-2xl md:rounded-b-3xl">
                     <button onclick="actions.finishBlanks()" class="w-full sm:w-auto bg-[#F5A623] hover:bg-[#E09612] text-white font-bold py-3 md:py-2.5 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> Проверить
                     </button>
@@ -1057,10 +1518,41 @@
             const progressValues = Object.values(state.progress);
             const avgScore = progressValues.length > 0 ? Math.round(progressValues.reduce((acc, p) => acc + p.bestScore, 0) / progressValues.length) : 0;
 
+            const todayStr = getTodayStr();
+            const todayTime = formatTime(state.timeStats[todayStr] || 0);
+            const totalTimeSecs = Object.values(state.timeStats).reduce((a,b) => a+b, 0);
+            const totalTime = formatTime(totalTimeSecs);
+
+            const last7DaysHTML = Array.from({length: 7}).map((_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (6 - i));
+                const dayStr = d.toISOString().split('T')[0];
+                const shortDay = d.toLocaleDateString('ru-RU', { weekday: 'short' });
+                const secs = state.timeStats[dayStr] || 0;
+                
+                const maxSecs = Math.max(...Array.from({length: 7}).map((_, j) => {
+                    const d2 = new Date(); d2.setDate(d2.getDate() - j);
+                    return state.timeStats[d2.toISOString().split('T')[0]] || 0;
+                })) || 1; 
+                
+                const heightPct = Math.max((secs / maxSecs) * 100, 2); 
+
+                return `
+                   <div class="flex flex-col items-center gap-1 flex-1">
+                     <div class="w-full max-w-[40px] bg-[#FAF7F2] rounded-t-lg flex items-end h-24 md:h-32">
+                        <div class="w-full bg-[#4A90D9] rounded-t-lg transition-all duration-1000" style="height: ${heightPct}%" title="${formatTime(secs)}"></div>
+                     </div>
+                     <div class="text-[10px] md:text-xs font-bold text-[#7A7570] capitalize">${shortDay}</div>
+                     <div class="text-[9px] md:text-[10px] text-[#2D2A26] font-bold">${secs >= 60 ? Math.floor(secs/60) + 'м' : ''}</div>
+                   </div>
+                `;
+            }).join('');
+
             return `
               <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
                 <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Подробная статистика</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
                    <div class="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col justify-center items-center text-center">
                       <div class="text-[#F5A623] mb-2 md:mb-4"><i class="ph-fill ph-medal text-5xl md:text-6xl"></i></div>
                       <h3 class="font-bold text-lg md:text-xl text-[#7A7570] mb-1 md:mb-2">Общий средний балл</h3>
@@ -1071,6 +1563,32 @@
                      ${sectionsHTML}
                    </div>
                 </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
+                   <div class="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col">
+                      <div class="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
+                          <i class="ph-fill ph-clock text-2xl md:text-3xl text-[#4A90D9]"></i>
+                          <h3 class="font-bold text-lg md:text-xl text-[#2D2A26]">Время занятий</h3>
+                      </div>
+                      <div class="flex flex-col gap-4 mt-auto">
+                          <div class="flex justify-between items-center border-b border-[#E8E4DF] pb-3">
+                              <span class="text-[#7A7570] font-bold text-sm md:text-base">Сегодня:</span>
+                              <span class="text-xl md:text-2xl font-black text-[#4A90D9]">${todayTime}</span>
+                          </div>
+                          <div class="flex justify-between items-center">
+                              <span class="text-[#7A7570] font-bold text-sm md:text-base">Всего времени:</span>
+                              <span class="text-xl md:text-2xl font-black text-[#2D2A26]">${totalTime}</span>
+                          </div>
+                      </div>
+                   </div>
+                   <div class="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col">
+                      <h3 class="font-bold text-lg md:text-xl text-[#2D2A26] mb-6">Активность (за 7 дней)</h3>
+                      <div class="flex justify-between items-end mt-auto gap-1 sm:gap-2">
+                          ${last7DaysHTML}
+                      </div>
+                   </div>
+                </div>
+
               </div>
             `;
           }
@@ -1163,6 +1681,35 @@
           return '';
         }
 
+        // МОДАЛКА ШАБЛОНА
+        function getTemplateModalHTML() {
+          if (!state.viewTemplateModal) return '';
+          const template = TEMPLATES.find(t => t.id === state.viewTemplateModal);
+          if (!template) return '';
+          
+          return `
+            <div class="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+              <div class="bg-white rounded-2xl md:rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+                <div class="p-4 md:p-6 border-b border-[#E8E4DF] flex justify-between items-center bg-gray-50/50 shrink-0 rounded-t-2xl md:rounded-t-3xl">
+                  <h3 class="text-lg md:text-xl font-bold">Скелет шаблона</h3>
+                  <button onclick="actions.closeTemplateModal()" class="text-[#7A7570] hover:text-[#E74C3C] transition-colors p-1"><i class="ph ph-x text-xl md:text-2xl"></i></button>
+                </div>
+                <div class="p-5 md:p-8 overflow-y-auto custom-scroll">
+                  <div class="text-[#4A90D9] font-bold text-lg mb-4 flex items-center gap-2">
+                    <i class="ph-fill ph-magic-wand"></i> ${template.name}
+                  </div>
+                  <div class="bg-[#FAF7F2] p-4 rounded-xl border border-[#E8E4DF] mb-6">
+                    ${renderSkeleton(template)}
+                  </div>
+                  <div class="bg-yellow-50 text-yellow-800 p-4 rounded-xl border border-yellow-100 text-sm">
+                     <b>💡 Лайфхак:</b> ${template.tip}
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
         function getModalHTML() {
           if (!state.modeSelectorId) return '';
           return `
@@ -1219,6 +1766,7 @@
                ${getViewHTML()}
             </main>
             ${getModalHTML()}
+            ${getTemplateModalHTML()}
           `;
         }
 
@@ -1236,6 +1784,23 @@
           
           state.view = 'dashboard';
           render();
+
+          // Глобальный таймер учета времени
+          setInterval(() => {
+            if (['study', 'training', 'training_blanks', 'blitz'].includes(state.view)) {
+              const currentToday = getTodayStr();
+              state.timeStats[currentToday] = (state.timeStats[currentToday] || 0) + 1;
+              
+              // Локальное сохранение каждые 10 секунд
+              if (state.timeStats[currentToday] % 10 === 0) {
+                 localStorage.setItem('ege_plan_time_stats', JSON.stringify(state.timeStats));
+              }
+              // Фоновое сохранение в облако каждую минуту активного таймера
+              if (state.timeStats[currentToday] % 60 === 0) {
+                 saveProgressToCloud();
+              }
+            }
+          }, 1000);
 
           const initAuth = async () => {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
