@@ -277,8 +277,11 @@
 
           updateDraft: (val) => {
             state.userDraft = val;
-            const btn = document.getElementById('check-btn');
-            if (btn) btn.disabled = val.trim().length < 10;
+            // Отключаем кнопку только в классическом режиме тренировки (в Блице кнопка активна всегда)
+            if (state.view === 'training') {
+              const btn = document.getElementById('check-btn');
+              if (btn) btn.disabled = val.trim().length < 10;
+            }
           },
 
           updateBlank: (idx, val) => {
@@ -302,7 +305,9 @@
             state.modeSelectorId = null;
             state.comparisonResult = null;
 
-            if (mode === 'classic') {
+            if (mode === 'study') {
+              state.view = 'study';
+            } else if (mode === 'classic') {
               state.userDraft = '';
               state.view = 'training';
             } else if (mode === 'blanks') {
@@ -676,6 +681,60 @@
             `;
           }
 
+          if (state.view === 'study') {
+            const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
+            
+            const planContentHTML = plan.plan.points.map((p, idx) => `
+              <div class="mb-4">
+                <div class="font-bold text-[#2D2A26] text-base md:text-lg leading-tight">${idx + 1}. ${p.text}</div>
+                ${p.subpoints.length > 0 ? `
+                  <ul class="mt-2 space-y-1 pl-4 md:pl-6">
+                    ${p.subpoints.map((sp, spIdx) => `
+                      <li class="flex items-start gap-2">
+                        <span class="text-[#4A90D9] mt-[2px] shrink-0">•</span>
+                        <span class="text-[#2D2A26] text-sm md:text-base leading-tight">${String.fromCharCode(1072 + spIdx)}) ${sp}</span>
+                      </li>
+                    `).join('')}
+                  </ul>
+                ` : ''}
+              </div>
+            `).join('');
+
+            return `
+              <div class="h-full flex flex-col pr-1 md:pr-2 pb-6">
+                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 md:mb-5 font-medium transition-colors text-sm md:text-base self-start">
+                  <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
+                </button>
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow">
+                  <div class="shrink-0 p-4 md:p-6 border-b border-[#E8E4DF] bg-gray-50/50">
+                    <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#5CB85C] mb-1 md:mb-2 flex items-center gap-1">
+                      <i class="ph-fill ph-student text-lg"></i> Режим изучения
+                    </span>
+                    <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
+                  </div>
+                  
+                  <div class="flex-grow p-5 md:p-8 overflow-y-auto">
+                    <div class="max-w-2xl mx-auto">
+                      <div class="mb-6 text-sm text-[#7A7570] bg-[#FAF7F2] p-4 rounded-xl border border-[#E8E4DF]">
+                         Внимательно прочитайте и запомните структуру идеального ответа. Когда будете готовы, выберите один из режимов тренировки ниже.
+                      </div>
+                      ${planContentHTML}
+                    </div>
+                  </div>
+
+                  <div class="shrink-0 p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3">
+                    <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-3 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                      <i class="ph-fill ph-puzzle-piece text-lg md:text-xl"></i> Заполнить пробелы
+                    </button>
+                    <button onclick="actions.startTraining(${plan.id}, 'classic')" class="w-full sm:w-auto bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                      <i class="ph-fill ph-pen-nib text-lg md:text-xl"></i> Написать с нуля
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+
           if (state.view === 'training' || state.view === 'blitz') {
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
             const isBlitz = state.view === 'blitz';
@@ -701,12 +760,12 @@
                         <li>Минимум 3 пункта, детализированных в подпунктах.</li>
                       </ul>
                     </div>` : ''}
-                    <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите...' : '1. Понятие...'}" class="flex-grow w-full resize-none p-3 md:p-4 font-mono text-[14px] md:text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all outline-none" spellcheck="false" autofocus>${state.userDraft}</textarea>
+                    <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите...' : '1. Понятие...'}" class="flex-grow w-full resize-none p-3 md:p-4 font-mono text-[14px] md:text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all outline-none min-h-[250px]" spellcheck="false" autofocus>${state.userDraft}</textarea>
                   </div>
                   <div class="p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 shrink-0 flex flex-col sm:flex-row justify-between items-center gap-3">
                     ${!isBlitz ? `<button onclick="actions.useHint()" class="text-[#7A7570] hover:text-[#2D2A26] font-medium text-xs md:text-sm px-4 py-2 w-full sm:w-auto text-center border border-[#E8E4DF] sm:border-transparent rounded-lg sm:rounded-none bg-white sm:bg-transparent">Нужна подсказка</button>` : '<div class="hidden sm:block"></div>'}
                     <button id="check-btn" onclick="actions.finishTraining(${isBlitz})" ${(!isBlitz && state.userDraft.trim().length < 10) ? 'disabled' : ''} class="w-full sm:w-auto ${isBlitz ? 'bg-[#2D2A26] hover:bg-black' : 'bg-[#4A90D9] hover:bg-[#3A7BC0] disabled:bg-gray-300 disabled:cursor-not-allowed'} text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
-                      <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> ${isBlitz ? 'Завершить' : 'Проверить план'}
+                      <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> ${isBlitz ? 'Завершить досрочно' : 'Проверить план'}
                     </button>
                   </div>
                 </div>
@@ -867,17 +926,18 @@
             <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
               <div class="bg-white rounded-2xl md:rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-[#E8E4DF]">
                 <div class="p-4 md:p-6 border-b border-[#E8E4DF] flex justify-between items-center bg-gray-50/50">
-                  <h3 class="text-lg md:text-xl font-bold">Выберите режим тренировки</h3>
+                  <h3 class="text-lg md:text-xl font-bold">Выберите режим</h3>
                   <button onclick="actions.closeModal()" class="text-[#7A7570] hover:text-[#E74C3C] transition-colors p-1"><i class="ph ph-x text-xl md:text-2xl"></i></button>
                 </div>
-                <div class="p-4 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                  <button onclick="actions.startTraining(${state.modeSelectorId}, 'classic')" class="text-left p-4 md:p-6 rounded-xl md:rounded-2xl border-2 border-[#E8E4DF] hover:border-[#4A90D9] hover:bg-[#4A90D9]/5 transition-all group flex flex-col sm:block">
-                    <div class="bg-[#4A90D9]/10 text-[#4A90D9] w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center mb-3 md:mb-4 group-hover:scale-110 transition-transform shrink-0">
-                      <i class="ph-fill ph-pen-nib text-xl md:text-2xl"></i>
+                <div class="p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-h-[80vh] overflow-y-auto">
+                  
+                  <button onclick="actions.startTraining(${state.modeSelectorId}, 'study')" class="sm:col-span-2 text-left p-4 md:p-6 rounded-xl md:rounded-2xl border-2 border-[#E8E4DF] hover:border-[#5CB85C] hover:bg-[#5CB85C]/5 transition-all group flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
+                    <div class="bg-[#5CB85C]/10 text-[#5CB85C] w-10 h-10 md:w-14 md:h-14 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                      <i class="ph-fill ph-student text-xl md:text-3xl"></i>
                     </div>
                     <div>
-                      <h4 class="font-bold text-base md:text-lg mb-1 md:mb-2">Написать с нуля</h4>
-                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Классический Active Recall. Пустой лист, максимальная эффективность.</p>
+                      <h4 class="font-bold text-base md:text-lg mb-1">Изучить план перед тренировкой</h4>
+                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Прочитайте и запомните структуру идеального ответа, прежде чем проверять себя.</p>
                     </div>
                   </button>
 
@@ -890,6 +950,17 @@
                       <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Часть пунктов скрыта. Отличный вариант для начального этапа.</p>
                     </div>
                   </button>
+
+                  <button onclick="actions.startTraining(${state.modeSelectorId}, 'classic')" class="text-left p-4 md:p-6 rounded-xl md:rounded-2xl border-2 border-[#E8E4DF] hover:border-[#4A90D9] hover:bg-[#4A90D9]/5 transition-all group flex flex-col sm:block">
+                    <div class="bg-[#4A90D9]/10 text-[#4A90D9] w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center mb-3 md:mb-4 group-hover:scale-110 transition-transform shrink-0">
+                      <i class="ph-fill ph-pen-nib text-xl md:text-2xl"></i>
+                    </div>
+                    <div>
+                      <h4 class="font-bold text-base md:text-lg mb-1 md:mb-2">Написать с нуля</h4>
+                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Классический Active Recall. Пустой лист, максимальная эффективность.</p>
+                    </div>
+                  </button>
+
                 </div>
               </div>
             </div>
