@@ -11,6 +11,9 @@
   <!-- Иконки Phosphor Icons -->
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
   
+  <!-- html2canvas для скриншотов -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
   <!-- Шрифты -->
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   
@@ -463,7 +466,61 @@
 
           openModal: (id) => { state.modeSelectorId = id; render(); },
           closeModal: () => { state.modeSelectorId = null; render(); },
-          printReport: () => window.print()
+          
+          copyScreenshot: async () => {
+            const btn = document.getElementById('screenshot-btn');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="ph ph-spinner-gap animate-spin text-lg"></i> Обработка...';
+            btn.disabled = true;
+
+            try {
+              // Находим контейнер с результатами и карточками ответов
+              const target = document.getElementById('screenshot-target');
+              
+              // Ждем рендеринга html2canvas
+              const canvas = await html2canvas(target, {
+                scale: 2,
+                backgroundColor: '#FAF7F2',
+                useCORS: true
+              });
+
+              canvas.toBlob(async (blob) => {
+                try {
+                  // Пытаемся записать в буфер обмена (Modern API)
+                  const item = new ClipboardItem({ 'image/png': blob });
+                  await navigator.clipboard.write([item]);
+                  btn.innerHTML = '<i class="ph-fill ph-check-circle text-lg text-white"></i> Скопировано!';
+                  btn.classList.remove('bg-[#4A90D9]/10', 'text-[#4A90D9]', 'hover:bg-[#4A90D9]/20');
+                  btn.classList.add('bg-[#5CB85C]', 'text-white');
+                } catch (clipboardErr) {
+                  console.warn('Clipboard API недоступно, скачиваем картинку...', clipboardErr);
+                  // Фолбэк: скачиваем файл, если буфер обмена заблокирован браузером
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'plan_result.png';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  btn.innerHTML = '<i class="ph ph-download text-lg"></i> Сохранено как файл';
+                }
+                
+                // Возвращаем кнопку в исходное состояние
+                setTimeout(() => {
+                  btn.innerHTML = originalHTML;
+                  btn.disabled = false;
+                  btn.className = "w-full md:w-auto flex items-center justify-center gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-4 py-3 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base";
+                }, 3000);
+              }, 'image/png');
+
+            } catch (err) {
+              console.error('Ошибка создания скриншота:', err);
+              btn.innerHTML = '<i class="ph ph-warning-circle text-lg"></i> Ошибка';
+              setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+              }, 3000);
+            }
+          }
         };
 
         const saveProgress = (score) => {
@@ -684,15 +741,16 @@
           if (state.view === 'study') {
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
             
+            // КОМПАКТНАЯ ВЕРСТКА ДЛЯ РЕЖИМА ИЗУЧЕНИЯ
             const planContentHTML = plan.plan.points.map((p, idx) => `
-              <div class="mb-4">
-                <div class="font-bold text-[#2D2A26] text-base md:text-lg leading-tight">${idx + 1}. ${p.text}</div>
+              <div class="mb-3 break-inside-avoid">
+                <div class="font-bold text-[#2D2A26] text-[13px] md:text-[15px] leading-tight">${idx + 1}. ${p.text}</div>
                 ${p.subpoints.length > 0 ? `
-                  <ul class="mt-2 space-y-1 pl-4 md:pl-6">
+                  <ul class="mt-1 space-y-0.5 pl-4 md:pl-5">
                     ${p.subpoints.map((sp, spIdx) => `
-                      <li class="flex items-start gap-2">
-                        <span class="text-[#4A90D9] mt-[2px] shrink-0">•</span>
-                        <span class="text-[#2D2A26] text-sm md:text-base leading-tight">${String.fromCharCode(1072 + spIdx)}) ${sp}</span>
+                      <li class="flex items-start gap-1.5">
+                        <span class="text-[#4A90D9] text-[10px] mt-[3px] shrink-0">•</span>
+                        <span class="text-[#2D2A26] text-[12px] md:text-[14px] leading-tight">${String.fromCharCode(1072 + spIdx)}) ${sp}</span>
                       </li>
                     `).join('')}
                   </ul>
@@ -706,28 +764,33 @@
                   <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
                 </button>
                 <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow">
-                  <div class="shrink-0 p-4 md:p-6 border-b border-[#E8E4DF] bg-gray-50/50">
+                  <div class="shrink-0 p-4 md:p-5 border-b border-[#E8E4DF] bg-gray-50/50">
                     <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#5CB85C] mb-1 md:mb-2 flex items-center gap-1">
                       <i class="ph-fill ph-student text-lg"></i> Режим изучения
                     </span>
                     <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
                   
-                  <div class="flex-grow p-5 md:p-8 overflow-y-auto">
-                    <div class="max-w-2xl mx-auto">
-                      <div class="mb-6 text-sm text-[#7A7570] bg-[#FAF7F2] p-4 rounded-xl border border-[#E8E4DF]">
+                  <div class="flex-grow p-4 md:p-6 overflow-y-auto">
+                    <div class="max-w-4xl mx-auto">
+                      <div class="mb-4 md:mb-5 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
                          Внимательно прочитайте и запомните структуру идеального ответа. Когда будете готовы, выберите один из режимов тренировки ниже.
                       </div>
-                      ${planContentHTML}
+                      
+                      <!-- КОЛОНКИ ДЛЯ КОМПАКТНОСТИ -->
+                      <div class="columns-1 md:columns-2 gap-6">
+                        ${planContentHTML}
+                      </div>
+
                     </div>
                   </div>
 
-                  <div class="shrink-0 p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3">
-                    <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-3 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
-                      <i class="ph-fill ph-puzzle-piece text-lg md:text-xl"></i> Заполнить пробелы
+                  <div class="shrink-0 p-4 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3">
+                    <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                      <i class="ph-fill ph-puzzle-piece text-lg"></i> Заполнить пробелы
                     </button>
-                    <button onclick="actions.startTraining(${plan.id}, 'classic')" class="w-full sm:w-auto bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
-                      <i class="ph-fill ph-pen-nib text-lg md:text-xl"></i> Написать с нуля
+                    <button onclick="actions.startTraining(${plan.id}, 'classic')" class="w-full sm:w-auto bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                      <i class="ph-fill ph-pen-nib text-lg"></i> Написать с нуля
                     </button>
                   </div>
                 </div>
@@ -874,6 +937,7 @@
               </div>
             `).join('');
 
+            // Оборачиваем результат в блок для скриншота
             return `
               <div id="comparison-report" class="h-full overflow-y-auto pr-1 md:pr-2 pb-6">
                  <div class="flex flex-col md:flex-row justify-between items-center mb-6 print-hidden gap-4">
@@ -882,31 +946,34 @@
                   </button>
                   ${res.isBlitz 
                     ? `<button onclick="actions.startBlitz()" class="w-full md:w-auto flex items-center justify-center gap-2 bg-[#8E54E9] hover:bg-[#7a42d4] text-white font-bold px-6 py-3 md:py-2 rounded-xl md:rounded-lg transition-colors shadow-sm animate-pulse text-sm md:text-base"><i class="ph-fill ph-lightning text-lg"></i> Следующий план Блица</button>` 
-                    : `<button onclick="actions.printReport()" class="w-full md:w-auto flex items-center justify-center gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-4 py-3 md:py-2 rounded-xl md:rounded-lg transition-colors text-sm md:text-base"><i class="ph ph-camera text-lg"></i> Сохранить для учителя</button>`}
+                    : `<button id="screenshot-btn" onclick="actions.copyScreenshot()" class="w-full md:w-auto flex items-center justify-center gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-4 py-3 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base"><i class="ph ph-camera text-lg"></i> Сохранить для учителя</button>`}
                 </div>
 
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] p-6 md:p-8 mb-6 md:mb-8 text-center shadow-sm relative overflow-hidden">
-                  <div class="md:absolute static md:top-4 md:right-4 bg-blue-50 text-[#4A90D9] text-[11px] md:text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 animate-bounce print-hidden mb-4 md:mb-0">
-                     <i class="ph-fill ph-cursor-click text-sm md:text-base"></i> Алгоритм ошибся? Кликайте на значки ✓ и ✗ ниже!
-                  </div>
-                  <h2 class="text-lg md:text-xl font-bold text-[#7A7570] mb-2">Ваш результат</h2>
-                  <div class="text-5xl md:text-6xl font-black text-[#2D2A26] mb-3 md:mb-4 flex justify-center items-baseline gap-1">
-                    <span class="${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
-                    <span class="text-2xl md:text-3xl text-[#7A7570]">/100</span>
-                  </div>
-                  <p class="text-base md:text-lg font-medium text-[#2D2A26] leading-tight mb-2">Тема: «${plan.topic}»</p>
-                  <p class="text-xs md:text-sm text-[#7A7570] mt-2 max-w-xl mx-auto print-hidden">Система использует нечёткое сравнение (прощает синонимы и опечатки). Проверьте эталонный план ниже, чтобы закрепить материал.</p>
-                </div>
-
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden">
-                  <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-[#E8E4DF]">
-                    <div class="p-4 md:p-8 bg-gray-50/30">
-                      <h3 class="font-bold text-base md:text-lg mb-4 md:mb-6 flex items-center gap-2 text-[#7A7570]">Ваш ответ</h3>
-                      <div class="font-mono text-[13px] md:text-[14px] leading-loose whitespace-pre-wrap text-[#2D2A26] break-words">${state.userDraft || "Пустой ответ"}</div>
+                <!-- Блок, который мы будем скриншотить -->
+                <div id="screenshot-target" class="bg-[#FAF7F2] p-2 md:p-4 -mx-2 md:-mx-4 rounded-3xl">
+                  <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] p-6 md:p-8 mb-6 md:mb-8 text-center shadow-sm relative overflow-hidden">
+                    <div class="md:absolute static md:top-4 md:right-4 bg-blue-50 text-[#4A90D9] text-[11px] md:text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 animate-bounce print-hidden mb-4 md:mb-0" data-html2canvas-ignore>
+                       <i class="ph-fill ph-cursor-click text-sm md:text-base"></i> Алгоритм ошибся? Кликайте на значки ✓ и ✗ ниже!
                     </div>
-                    <div class="p-4 md:p-8">
-                      <h3 class="font-bold text-base md:text-lg mb-4 md:mb-6 flex items-center gap-2 text-[#5CB85C]">Эталонный план</h3>
-                      <div class="space-y-4 md:space-y-6">${referenceHTML}</div>
+                    <h2 class="text-lg md:text-xl font-bold text-[#7A7570] mb-2">Ваш результат</h2>
+                    <div class="text-5xl md:text-6xl font-black text-[#2D2A26] mb-3 md:mb-4 flex justify-center items-baseline gap-1">
+                      <span class="${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
+                      <span class="text-2xl md:text-3xl text-[#7A7570]">/100</span>
+                    </div>
+                    <p class="text-base md:text-lg font-medium text-[#2D2A26] leading-tight mb-2">Тема: «${plan.topic}»</p>
+                    <p class="text-xs md:text-sm text-[#7A7570] mt-2 max-w-xl mx-auto print-hidden" data-html2canvas-ignore>Система использует нечёткое сравнение (прощает синонимы и опечатки). Проверьте эталонный план ниже, чтобы закрепить материал.</p>
+                  </div>
+
+                  <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-[#E8E4DF]">
+                      <div class="p-4 md:p-8 bg-gray-50/30">
+                        <h3 class="font-bold text-base md:text-lg mb-4 md:mb-6 flex items-center gap-2 text-[#7A7570]">Ваш ответ</h3>
+                        <div class="font-mono text-[13px] md:text-[14px] leading-loose whitespace-pre-wrap text-[#2D2A26] break-words">${state.userDraft || "Пустой ответ"}</div>
+                      </div>
+                      <div class="p-4 md:p-8 bg-white">
+                        <h3 class="font-bold text-base md:text-lg mb-4 md:mb-6 flex items-center gap-2 text-[#5CB85C]">Эталонный план</h3>
+                        <div class="space-y-4 md:space-y-6">${referenceHTML}</div>
+                      </div>
                     </div>
                   </div>
                 </div>
