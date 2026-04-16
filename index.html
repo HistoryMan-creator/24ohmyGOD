@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ЕГЭ Plan Master</title>
   
+  <!-- PWA: Подключение манифеста и иконок -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#4A90D9">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png">
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
@@ -24,9 +31,15 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
-    /* Стили для корректной печати при фиксированной высоте экранов */
+    /* Кастомный тонкий скроллбар для внутренних блоков */
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 10px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+    
+    /* Стили для корректной печати */
     @media print {
-      body, #app, main, .overflow-y-auto { 
+      body, #app, main, .overflow-y-auto, .custom-scroll { 
         height: auto !important; 
         overflow: visible !important; 
         display: block !important; 
@@ -38,7 +51,7 @@
     }
   </style>
 </head>
-<body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white h-screen flex flex-col overflow-hidden">
+<body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white h-screen w-screen flex flex-col overflow-hidden">
 
   <div id="app" class="flex-grow flex flex-col h-full overflow-hidden">
     <!-- Заглушка загрузки -->
@@ -53,7 +66,16 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // --- РЕГИСТРАЦИЯ PWA SERVICE WORKER ---
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((registration) => console.log('Service Worker успешно зарегистрирован:', registration.scope))
+          .catch((error) => console.log('Ошибка регистрации Service Worker:', error));
+      });
+    }
 
     function showErrorUI(errorMessage) {
       document.getElementById('app').innerHTML = `
@@ -81,12 +103,18 @@
           appId: "1:1014961554401:web:75dd5113db7293b73248a0",
           measurementId: "G-L4TD2299GR"
         };
-        // ------------------------------------------------
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         let currentUser = null;
+
+        // Включаем оффлайн-режим для самой базы данных Firebase!
+        try {
+          await enableIndexedDbPersistence(db);
+        } catch (err) {
+          console.warn("Оффлайн-кэш Firebase недоступен (возможно открыто несколько вкладок).", err);
+        }
 
         // --- 2. ИМПОРТ БАЗЫ ДАННЫХ ---
         let dbModule;
@@ -262,40 +290,44 @@
           blanksData: [],
           timeLeft: 60,
           timerRef: null,
-          progress: {},
-          streak: { count: 0, lastActive: null }
+          progress: JSON.parse(localStorage.getItem('ege_plan_progress') || '{}'),
+          streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}')
         };
 
-        // --- 6. РАБОТА С FIREBASE FIRESTORE ---
+        // --- 6. РАБОТА С FIREBASE FIRESTORE И ЛОКАЛЬНЫМ КЭШЕМ ---
         async function loadUserData() {
           if (!currentUser) return;
           try {
-            // Путь к документу юзера: /users/UID
             const docRef = doc(db, 'users', currentUser.uid);
             const snap = await getDoc(docRef);
             if (snap.exists()) {
               const data = snap.data();
-              if (data.progress) state.progress = data.progress;
-              if (data.streak) state.streak = data.streak;
+              if (data.progress) {
+                state.progress = data.progress;
+                localStorage.setItem('ege_plan_progress', JSON.stringify(state.progress));
+              }
+              if (data.streak) {
+                state.streak = data.streak;
+                localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
+              }
             } else {
-              state.progress = {};
-              state.streak = { count: 0, lastActive: null };
+              saveProgressToCloud();
             }
           } catch(e) {
             console.error("Ошибка загрузки данных из облака:", e);
           }
         }
 
-        async function saveProgressToCloud() {
+        function saveProgressToCloud() {
           if (!currentUser) return;
           try {
             const docRef = doc(db, 'users', currentUser.uid);
-            await setDoc(docRef, {
+            setDoc(docRef, {
               progress: state.progress,
               streak: state.streak
-            }, { merge: true });
+            }, { merge: true }).catch(err => console.error("Фоновая ошибка синхронизации:", err));
           } catch (e) {
-            console.error("Ошибка сохранения в облако:", e);
+            console.error("Ошибка подготовки сохранения в облако:", e);
           }
         }
 
@@ -312,6 +344,8 @@
             nextReview: calculateNextReview(newAttempts, score, today),
             status: score >= 90 && newAttempts >= 3 ? 'mastered' : score >= 70 ? 'almost' : 'learning'
           };
+          
+          localStorage.setItem('ege_plan_progress', JSON.stringify(state.progress));
           updateStreak();
         };
 
@@ -328,6 +362,8 @@
               state.streak.count = 1;
             }
             state.streak.lastActive = today;
+            
+            localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
           }
           saveProgressToCloud();
         };
@@ -577,7 +613,34 @@
 
             try {
               const target = document.getElementById('screenshot-target');
-              const canvas = await html2canvas(target, { scale: 2, backgroundColor: '#FAF7F2', useCORS: true });
+              
+              // Для корректного скриншота без обрезки клонируем контейнер
+              const clone = target.cloneNode(true);
+              clone.style.height = 'auto';
+              clone.style.position = 'absolute';
+              clone.style.left = '-9999px';
+              clone.style.width = target.offsetWidth + 'px'; 
+              
+              // Раскрываем все скроллящиеся блоки внутри клона
+              const scrollables = clone.querySelectorAll('.custom-scroll, .overflow-y-auto');
+              scrollables.forEach(el => {
+                 el.classList.remove('overflow-y-auto', 'custom-scroll');
+                 el.classList.add('h-auto', 'overflow-visible');
+                 el.style.height = 'auto';
+                 el.style.maxHeight = 'none';
+              });
+              
+              document.body.appendChild(clone);
+
+              const canvas = await html2canvas(clone, { 
+                scale: 2, 
+                backgroundColor: '#FAF7F2', 
+                useCORS: true,
+                windowHeight: clone.scrollHeight
+              });
+              
+              document.body.removeChild(clone);
+
               canvas.toBlob(async (blob) => {
                 try {
                   const item = new ClipboardItem({ 'image/png': blob });
@@ -615,7 +678,7 @@
 
           return `
             <header class="bg-white border-b border-[#E8E4DF] shrink-0 print-hidden shadow-sm">
-              <div class="max-w-5xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
+              <div class="max-w-[1200px] w-full mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
                 <div class="flex items-center gap-4 md:gap-6">
                   <div class="flex items-center gap-2 cursor-pointer shrink-0" onclick="actions.setView('dashboard')">
                     <div class="bg-[#4A90D9] p-1.5 rounded-lg text-white">
@@ -712,7 +775,7 @@
 
           if (state.view === 'auth') {
             return `
-              <div class="flex-grow flex items-center justify-center px-4 min-h-[70vh]">
+              <div class="flex-grow flex items-center justify-center px-4 min-h-[70vh] w-full">
                 <div class="bg-white p-8 rounded-3xl border border-[#E8E4DF] shadow-sm max-w-md w-full">
                   <div class="flex items-center gap-2 justify-center mb-6 text-[#4A90D9]">
                     <div class="bg-[#4A90D9] p-2 rounded-xl text-white">
@@ -773,7 +836,7 @@
             }
 
             return `
-              <div class="flex flex-col h-full overflow-hidden">
+              <div class="flex flex-col h-full overflow-hidden w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
                 <div class="shrink-0 mb-4 md:mb-5">
                   <h2 class="text-2xl md:text-3xl font-bold mb-1">С возвращением! 👋</h2>
                   <p class="text-[#7A7570] text-sm md:text-base">Ваша статистика и планы на сегодня.</p>
@@ -806,7 +869,7 @@
                   <h3 class="text-lg md:text-xl font-bold">План на сегодня</h3>
                 </div>
                 
-                <div class="flex-grow overflow-y-auto pr-1 md:pr-2 pb-6">
+                <div class="flex-grow overflow-y-auto custom-scroll pr-1 md:pr-2 pb-6">
                   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                     ${reviewCards}
                   </div>
@@ -817,7 +880,7 @@
 
           if (state.view === 'catalog') {
             return `
-              <div class="flex flex-col h-full overflow-hidden">
+              <div class="flex flex-col h-full overflow-hidden w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
                 <div class="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 md:mb-5">
                   <div>
                     <h2 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">Каталог планов</h2>
@@ -833,7 +896,7 @@
                   ${window.generateBlockFilters()}
                 </div>
 
-                <div class="flex-grow overflow-y-auto pr-1 md:pr-2 pb-6">
+                <div class="flex-grow overflow-y-auto custom-scroll pr-1 md:pr-2 pb-6">
                   <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
                     ${window.generateCatalogGrid()}
                   </div>
@@ -862,11 +925,11 @@
             `).join('');
 
             return `
-              <div class="h-full flex flex-col pr-1 md:pr-2 pb-6">
-                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 md:mb-5 font-medium transition-colors text-sm md:text-base self-start">
-                  <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
+              <div class="h-full flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
+                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 font-medium transition-colors text-sm md:text-base self-start">
+                  <i class="ph ph-arrow-left text-lg"></i> В каталог
                 </button>
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow">
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow min-h-0">
                   <div class="shrink-0 p-4 md:p-5 border-b border-[#E8E4DF] bg-gray-50/50">
                     <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#5CB85C] mb-1 md:mb-2 flex items-center gap-1">
                       <i class="ph-fill ph-student text-lg"></i> Режим изучения
@@ -874,24 +937,23 @@
                     <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
                   
-                  <div class="flex-grow p-4 md:p-6 overflow-y-auto">
+                  <div class="flex-grow p-4 md:p-6 overflow-y-auto custom-scroll">
                     <div class="max-w-4xl mx-auto">
                       <div class="mb-4 md:mb-5 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
-                         Внимательно прочитайте и запомните структуру идеального ответа. Когда будете готовы, выберите один из режимов тренировки ниже.
+                         Внимательно прочитайте и запомните структуру идеального ответа. Когда будете готовы, выберите один из режимов тренировки.
                       </div>
                       
                       <div class="columns-1 md:columns-2 gap-6">
                         ${planContentHTML}
                       </div>
-
                     </div>
                   </div>
 
                   <div class="shrink-0 p-4 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3">
-                    <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                    <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-2 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-puzzle-piece text-lg"></i> Заполнить пробелы
                     </button>
-                    <button onclick="actions.startTraining(${plan.id}, 'classic')" class="w-full sm:w-auto bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                    <button onclick="actions.startTraining(${plan.id}, 'classic')" class="w-full sm:w-auto bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-2 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-pen-nib text-lg"></i> Написать с нуля
                     </button>
                   </div>
@@ -904,19 +966,19 @@
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
             const isBlitz = state.view === 'blitz';
             return `
-              <div class="h-full overflow-y-auto pr-1 md:pr-2 pb-6 flex flex-col">
-                <div class="flex justify-between items-center mb-4 md:mb-5 shrink-0">
+              <div class="h-full flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
+                <div class="flex justify-between items-center mb-4 shrink-0">
                   <button onclick="actions.setView('catalog')" class="flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors text-sm md:text-base">
                     <i class="ph ph-arrow-left text-lg"></i> ${isBlitz ? 'Сдаться' : 'В каталог'}
                   </button>
-                  ${isBlitz ? `<div id="blitz-timer" class="text-2xl md:text-4xl font-black bg-white px-4 md:px-6 py-1 md:py-2 rounded-xl md:rounded-2xl border-2 shadow-sm text-[#4A90D9] border-[#E8E4DF]">00:${state.timeLeft.toString().padStart(2, '0')}</div>` : ''}
+                  ${isBlitz ? `<div id="blitz-timer" class="text-2xl md:text-3xl font-black bg-white px-4 md:px-6 py-1 md:py-1.5 rounded-xl md:rounded-2xl border-2 shadow-sm text-[#4A90D9] border-[#E8E4DF]">00:${state.timeLeft.toString().padStart(2, '0')}</div>` : ''}
                 </div>
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow min-h-[500px]">
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow min-h-0">
                   <div class="p-4 md:p-6 border-b border-[#E8E4DF] shrink-0 ${isBlitz ? 'bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] text-white' : 'bg-gray-50/50'}">
                     <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider ${isBlitz ? 'opacity-80' : 'text-[#4A90D9]'} mb-1 md:mb-2 block">${plan.section}</span>
                     <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
-                  <div class="flex-grow p-4 md:p-6 flex flex-col">
+                  <div class="flex-grow p-4 md:p-6 flex flex-col min-h-0">
                     ${!isBlitz ? `
                     <div class="mb-4 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF] shrink-0">
                       <p class="font-semibold mb-1 text-[#2D2A26]">Инструкция:</p>
@@ -929,7 +991,7 @@
                   </div>
                   <div class="p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 shrink-0 flex flex-col sm:flex-row justify-between items-center gap-3">
                     ${!isBlitz ? `<button onclick="actions.useHint()" class="text-[#7A7570] hover:text-[#2D2A26] font-medium text-xs md:text-sm px-4 py-2 w-full sm:w-auto text-center border border-[#E8E4DF] sm:border-transparent rounded-lg sm:rounded-none bg-white sm:bg-transparent">Нужна подсказка</button>` : '<div class="hidden sm:block"></div>'}
-                    <button id="check-btn" onclick="actions.finishTraining(${isBlitz})" ${(!isBlitz && state.userDraft.trim().length < 10) ? 'disabled' : ''} class="w-full sm:w-auto ${isBlitz ? 'bg-[#2D2A26] hover:bg-black' : 'bg-[#4A90D9] hover:bg-[#3A7BC0] disabled:bg-gray-300 disabled:cursor-not-allowed'} text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                    <button id="check-btn" onclick="actions.finishTraining(${isBlitz})" ${(!isBlitz && state.userDraft.trim().length < 10) ? 'disabled' : ''} class="w-full sm:w-auto ${isBlitz ? 'bg-[#2D2A26] hover:bg-black' : 'bg-[#4A90D9] hover:bg-[#3A7BC0] disabled:bg-gray-300 disabled:cursor-not-allowed'} text-white font-bold py-2.5 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> ${isBlitz ? 'Завершить досрочно' : 'Проверить план'}
                     </button>
                   </div>
@@ -951,23 +1013,23 @@
             `).join('');
 
             return `
-              <div class="h-full overflow-y-auto pr-1 md:pr-2 pb-6 flex flex-col">
-                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 md:mb-5 font-medium transition-colors text-sm md:text-base self-start">
+              <div class="h-full flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
+                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 font-medium transition-colors text-sm md:text-base self-start">
                   <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
                 </button>
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow">
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow min-h-0">
                   <div class="shrink-0 p-4 md:p-6 border-b border-[#E8E4DF] bg-gray-50/50">
                     <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#F5A623] mb-1 md:mb-2 flex items-center gap-1"><i class="ph-fill ph-puzzle-piece text-lg"></i> Заполни пробелы</span>
                     <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
-                  <div class="flex-grow p-4 md:p-6">
+                  <div class="flex-grow p-4 md:p-6 overflow-y-auto custom-scroll">
                     <div class="mb-4 md:mb-6 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
                        Впишите термины по смыслу. Оценки выставляются лояльно (синонимы работают).
                     </div>
-                    <div class="space-y-3 md:space-y-4">${blanksHTML}</div>
+                    <div class="space-y-3 md:space-y-4 max-w-4xl mx-auto">${blanksHTML}</div>
                   </div>
                   <div class="shrink-0 p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-end">
-                    <button onclick="actions.finishBlanks()" class="w-full sm:w-auto bg-[#F5A623] hover:bg-[#E09612] text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                    <button onclick="actions.finishBlanks()" class="w-full sm:w-auto bg-[#F5A623] hover:bg-[#E09612] text-white font-bold py-2.5 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> Проверить
                     </button>
                   </div>
@@ -998,7 +1060,7 @@
             const avgScore = progressValues.length > 0 ? Math.round(progressValues.reduce((acc, p) => acc + p.bestScore, 0) / progressValues.length) : 0;
 
             return `
-              <div class="h-full overflow-y-auto pr-1 md:pr-2 pb-6">
+              <div class="h-full overflow-y-auto custom-scroll w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-6">
                 <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Подробная статистика</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
                    <div class="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col justify-center items-center text-center">
@@ -1040,46 +1102,57 @@
             `).join('');
 
             return `
-              <div id="comparison-report" class="h-full overflow-y-auto pr-1 md:pr-2 pb-6">
-                 <div class="flex flex-col md:flex-row justify-between items-center mb-6 print-hidden gap-4">
+              <div id="comparison-report" class="h-full flex flex-col w-full max-w-[1400px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
+                 <div class="flex flex-col md:flex-row justify-between items-center mb-6 print-hidden gap-4 shrink-0">
                   <button onclick="actions.setView('catalog')" class="w-full md:w-auto flex items-center justify-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors border border-[#E8E4DF] md:border-transparent py-2 md:py-0 rounded-lg md:rounded-none bg-white md:bg-transparent text-sm md:text-base">
-                    <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
+                    <i class="ph ph-arrow-left text-lg"></i> Вернуться
                   </button>
-                  ${res.isBlitz 
-                    ? `<button onclick="actions.startBlitz()" class="w-full md:w-auto flex items-center justify-center gap-2 bg-[#8E54E9] hover:bg-[#7a42d4] text-white font-bold px-6 py-3 md:py-2 rounded-xl md:rounded-lg transition-colors shadow-sm animate-pulse text-sm md:text-base"><i class="ph-fill ph-lightning text-lg"></i> Следующий план Блица</button>` 
-                    : `<button id="screenshot-btn" onclick="actions.copyScreenshot()" class="w-full md:w-auto flex items-center justify-center gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-4 py-3 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base"><i class="ph ph-camera text-lg"></i> Сохранить для учителя</button>`}
-                </div>
-
-                <div id="screenshot-target" class="bg-[#FAF7F2] p-2 md:p-4 -mx-2 md:-mx-4 rounded-3xl">
-                  <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] p-6 md:p-8 mb-6 md:mb-8 text-center shadow-sm relative overflow-hidden">
-                    <div class="md:absolute static md:top-4 md:right-4 bg-blue-50 text-[#4A90D9] text-[11px] md:text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 animate-bounce print-hidden mb-4 md:mb-0" data-html2canvas-ignore>
-                       <i class="ph-fill ph-cursor-click text-sm md:text-base"></i> Алгоритм ошибся? Кликайте на значки ✓ и ✗ ниже!
-                    </div>
-                    <h2 class="text-lg md:text-xl font-bold text-[#7A7570] mb-2">Ваш результат</h2>
-                    <div class="text-5xl md:text-6xl font-black text-[#2D2A26] mb-3 md:mb-4 flex justify-center items-baseline gap-1">
-                      <span class="${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
-                      <span class="text-2xl md:text-3xl text-[#7A7570]">/100</span>
-                    </div>
-                    <p class="text-base md:text-lg font-medium text-[#2D2A26] leading-tight mb-2">Тема: «${plan.topic}»</p>
-                    <p class="text-xs md:text-sm text-[#7A7570] mt-2 max-w-xl mx-auto print-hidden" data-html2canvas-ignore>Система использует нечёткое сравнение (прощает синонимы и опечатки). Проверьте эталонный план ниже, чтобы закрепить материал.</p>
-                  </div>
-
-                  <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden">
-                    <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-[#E8E4DF]">
-                      <div class="p-4 md:p-8 bg-gray-50/30">
-                        <h3 class="font-bold text-base md:text-lg mb-4 md:mb-6 flex items-center gap-2 text-[#7A7570]">Ваш ответ</h3>
-                        <div class="font-mono text-[13px] md:text-[14px] leading-loose whitespace-pre-wrap text-[#2D2A26] break-words">${state.userDraft || "Пустой ответ"}</div>
-                      </div>
-                      <div class="p-4 md:p-8 bg-white">
-                        <h3 class="font-bold text-base md:text-lg mb-4 md:mb-6 flex items-center gap-2 text-[#5CB85C]">Эталонный план</h3>
-                        <div class="space-y-4 md:space-y-6">${referenceHTML}</div>
-                      </div>
-                    </div>
+                  <div class="flex w-full md:w-auto gap-2">
+                    ${res.isBlitz 
+                      ? `<button onclick="actions.startBlitz()" class="flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 bg-[#8E54E9] hover:bg-[#7a42d4] text-white font-bold px-3 md:px-4 py-2.5 md:py-2 rounded-lg transition-colors shadow-sm animate-pulse text-sm md:text-base"><i class="ph-fill ph-lightning text-lg"></i> След. Блиц</button>` 
+                      : ''}
+                    <button id="screenshot-btn" onclick="actions.copyScreenshot()" class="flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-3 md:px-4 py-2.5 md:py-2 rounded-lg transition-all text-sm md:text-base"><i class="ph ph-camera text-lg"></i> Сохранить отчёт</button>
                   </div>
                 </div>
-                
-                <div class="mt-6 md:mt-8 flex justify-center pb-10 print-hidden">
-                   <button onclick="actions.setView('catalog')" class="w-full md:w-auto bg-[#2D2A26] hover:bg-black text-white font-bold py-3 md:py-3 px-8 rounded-xl transition-colors shadow-md text-sm md:text-base">Вернуться и выбрать новый план</button>
+
+                <div id="screenshot-target" class="flex-grow flex flex-col min-h-0 bg-[#FAF7F2]">
+                  <!-- Компактная карточка результата для экономии места -->
+                  <div class="bg-white rounded-2xl border border-[#E8E4DF] p-4 mb-4 flex items-center justify-between shadow-sm shrink-0 relative">
+                    <div class="absolute -top-3 right-4 bg-blue-50 text-[#4A90D9] text-[10px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 animate-bounce print-hidden shadow-sm border border-blue-100" data-html2canvas-ignore>
+                       <i class="ph-fill ph-cursor-click"></i> Алгоритм ошибся? Кликайте на значки!
+                    </div>
+                    <div>
+                      <h2 class="text-xs md:text-sm font-bold text-[#7A7570] mb-0.5">Результат проверки:</h2>
+                      <p class="text-sm md:text-lg font-bold text-[#2D2A26] leading-tight">«${plan.topic}»</p>
+                    </div>
+                    <div class="flex items-baseline gap-1 text-right">
+                      <span class="text-3xl md:text-4xl font-black ${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
+                      <span class="text-lg md:text-xl text-[#7A7570] font-bold">/100</span>
+                    </div>
+                  </div>
+
+                  <!-- Разделенный экран: Ваш ответ / Эталон -->
+                  <div class="flex-grow flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+                    
+                    <div class="flex-1 bg-white border border-[#E8E4DF] rounded-2xl flex flex-col min-h-0 overflow-hidden shadow-sm">
+                      <div class="p-3 md:p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center shrink-0">
+                        <h3 class="font-bold text-sm md:text-base text-[#7A7570]">Ваш ответ</h3>
+                      </div>
+                      <div class="p-4 overflow-y-auto custom-scroll flex-grow font-mono text-[13px] md:text-[14px] leading-relaxed whitespace-pre-wrap text-[#2D2A26] break-words">
+                        ${state.userDraft || "Пустой ответ"}
+                      </div>
+                    </div>
+                    
+                    <div class="flex-1 bg-white border border-[#E8E4DF] rounded-2xl flex flex-col min-h-0 overflow-hidden shadow-sm">
+                      <div class="p-3 md:p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center shrink-0">
+                        <h3 class="font-bold text-sm md:text-base text-[#5CB85C]">Эталонный план ФИПИ</h3>
+                      </div>
+                      <div class="p-4 overflow-y-auto custom-scroll flex-grow space-y-4 md:space-y-6">
+                        ${referenceHTML}
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
               </div>
             `;
@@ -1096,7 +1169,7 @@
                   <h3 class="text-lg md:text-xl font-bold">Выберите режим</h3>
                   <button onclick="actions.closeModal()" class="text-[#7A7570] hover:text-[#E74C3C] transition-colors p-1"><i class="ph ph-x text-xl md:text-2xl"></i></button>
                 </div>
-                <div class="p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-h-[80vh] overflow-y-auto">
+                <div class="p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-h-[80vh] overflow-y-auto custom-scroll">
                   
                   <button onclick="actions.startTraining(${state.modeSelectorId}, 'study')" class="sm:col-span-2 text-left p-4 md:p-6 rounded-xl md:rounded-2xl border-2 border-[#E8E4DF] hover:border-[#5CB85C] hover:bg-[#5CB85C]/5 transition-all group flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
                     <div class="bg-[#5CB85C]/10 text-[#5CB85C] w-10 h-10 md:w-14 md:h-14 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
@@ -1139,7 +1212,7 @@
           const app = document.getElementById('app');
           app.innerHTML = `
             ${getHeaderHTML()}
-            <main class="flex-grow overflow-hidden w-full max-w-5xl mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2 flex flex-col" id="main-content">
+            <main class="flex-grow flex flex-col min-h-0 overflow-hidden w-full" id="main-content">
                ${getViewHTML()}
             </main>
             ${getModalHTML()}
