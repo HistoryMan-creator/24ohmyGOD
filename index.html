@@ -21,18 +21,24 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
-    /* Стили для скриншота/печати (скрываем лишнее) */
+    /* Стили для корректной печати при фиксированной высоте экранов */
     @media print {
-      body { background: white; }
+      body, #app, main, .overflow-y-auto { 
+        height: auto !important; 
+        overflow: visible !important; 
+        display: block !important; 
+        background: white !important;
+      }
       header { display: none; }
       .print-hidden { display: none !important; }
       #comparison-report { margin: 0; padding: 0; box-shadow: none; border: none; }
     }
   </style>
 </head>
-<body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white pb-12 min-h-screen flex flex-col">
+<!-- h-screen и overflow-hidden делают основную страницу без общего скролла -->
+<body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white h-screen flex flex-col overflow-hidden">
 
-  <div id="app" class="flex-grow flex flex-col min-h-[80vh]">
+  <div id="app" class="flex-grow flex flex-col h-full overflow-hidden">
     <!-- Заглушка загрузки -->
     <div class="flex-grow flex items-center justify-center">
       <div class="animate-pulse flex flex-col items-center">
@@ -43,11 +49,10 @@
   </div>
 
   <script type="module">
-    // Функция для красивого вывода ошибок вместо белого экрана
     function showErrorUI(errorMessage) {
       document.getElementById('app').innerHTML = `
-        <div class="flex flex-col items-center justify-center p-4 text-center min-h-[80vh]">
-          <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" fill="#E74C3C" viewBox="0 0 256 256" class="mb-5">
+        <div class="flex flex-col items-center justify-center p-4 text-center h-full overflow-y-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" fill="#E74C3C" viewBox="0 0 256 256" class="mb-5 shrink-0">
             <path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z"></path>
           </svg>
           <h1 class="text-2xl md:text-3xl font-extrabold text-[#2D2A26] mb-3">Ошибка загрузки приложения</h1>
@@ -83,7 +88,7 @@
         const RAW_PLANS = dbModule.RAW_PLANS || dbModule.PLANS;
 
         if (!RAW_PLANS || !Array.isArray(RAW_PLANS)) {
-          throw new Error("Файл загружен, но не удалось найти массив данных RAW_PLANS внутри ege_plans_db.js.");
+          throw new Error("Файл загружен, но не удалось найти массив данных внутри ege_plans_db.js.");
         }
 
         // --- 2. ПАРСЕРЫ И АДАПТЕРЫ ---
@@ -243,7 +248,7 @@
         const state = {
           view: 'dashboard',
           searchQuery: '',
-          selectedBlock: 'all', // Состояние для фильтрации по блокам
+          selectedBlock: 'all',
           selectedPlanId: null,
           userDraft: '',
           comparisonResult: null,
@@ -257,7 +262,7 @@
 
         // --- 5. ДЕЙСТВИЯ (ACTIONS) ---
         window.actions = {
-          setView: (v) => { window.scrollTo(0,0); state.view = v; render(); },
+          setView: (v) => { state.view = v; render(); },
           
           setSearch: (v) => { 
             state.searchQuery = v; 
@@ -304,15 +309,30 @@
               const planData = PLANS_DB.find(p => p.id === id);
               const items = [];
               planData.plan.points.forEach((p, pIdx) => {
-                items.push({ id: `p_${pIdx}`, type: 'point', text: p.text, hidden: Math.random() > 0.6, userInput: '' });
+                let pointHidden = Math.random() > 0.6;
+                let subpointsHidden = p.subpoints.map(() => Math.random() > 0.4);
+                
+                // Проверка: гарантируем, что хотя бы что-то из группы будет видно (пункт или один подпункт)
+                let allHidden = pointHidden && subpointsHidden.every(sh => sh === true);
+                
+                if (allHidden) {
+                  const totalItems = 1 + p.subpoints.length;
+                  const forceVisibleIdx = Math.floor(Math.random() * totalItems);
+                  if (forceVisibleIdx === 0) {
+                    pointHidden = false; // Открываем главный пункт
+                  } else {
+                    subpointsHidden[forceVisibleIdx - 1] = false; // Открываем случайный подпункт
+                  }
+                }
+
+                items.push({ id: `p_${pIdx}`, type: 'point', text: p.text, hidden: pointHidden, userInput: '' });
                 p.subpoints.forEach((sp, spIdx) => {
-                  items.push({ id: `s_${pIdx}_${spIdx}`, type: 'subpoint', text: sp, hidden: Math.random() > 0.4, userInput: '' });
+                  items.push({ id: `s_${pIdx}_${spIdx}`, type: 'subpoint', text: sp, hidden: subpointsHidden[spIdx], userInput: '' });
                 });
               });
               state.blanksData = items;
               state.view = 'training_blanks';
             }
-            window.scrollTo(0,0);
             render();
           },
 
@@ -324,7 +344,6 @@
             state.comparisonResult = null;
             state.timeLeft = 60;
             state.view = 'blitz';
-            window.scrollTo(0,0);
             render();
 
             clearInterval(state.timerRef);
@@ -353,7 +372,6 @@
             state.comparisonResult = result;
             saveProgress(result.score);
             state.view = 'comparison';
-            window.scrollTo(0,0);
             render();
           },
 
@@ -401,7 +419,6 @@
             state.comparisonResult = { score: finalScore, results: newResults, ignoreSubpoints: false, isBlitz: false };
             saveProgress(finalScore);
             state.view = 'comparison';
-            window.scrollTo(0,0);
             render();
           },
 
@@ -483,7 +500,7 @@
 
         function getHeaderHTML() {
           return `
-            <header class="bg-white border-b border-[#E8E4DF] sticky top-0 z-10 print-hidden shadow-sm">
+            <header class="bg-white border-b border-[#E8E4DF] shrink-0 print-hidden shadow-sm">
               <div class="max-w-5xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
                 <div class="flex items-center gap-4 md:gap-6">
                   <div class="flex items-center gap-2 cursor-pointer shrink-0" onclick="actions.setView('dashboard')">
@@ -528,9 +545,7 @@
         window.generateCatalogGrid = function() {
           const query = state.searchQuery.toLowerCase();
           const filtered = PLANS_DB.filter(plan => {
-            // 1. Фильтр по блокам
             if (state.selectedBlock !== 'all' && plan.section !== state.selectedBlock) return false;
-            // 2. Фильтр по поиску
             if (!query) return true;
             return plan.topic.toLowerCase().includes(query) || plan.aliases.some(a => a.toLowerCase().includes(query));
           });
@@ -572,88 +587,91 @@
             const reviews = PLANS_DB.filter(p => state.progress[p.id] && state.progress[p.id].nextReview <= today);
             
             let reviewCards = reviews.map(plan => `
-              <div onclick="actions.openModal(${plan.id})" class="bg-white rounded-2xl border border-[#E8E4DF] p-4 md:p-5 hover:shadow-lg hover:border-[#4A90D9]/50 transition-all cursor-pointer group flex flex-col relative overflow-hidden">
+              <div onclick="actions.openModal(${plan.id})" class="bg-white rounded-2xl border border-[#E8E4DF] p-4 hover:shadow-lg hover:border-[#4A90D9]/50 transition-all cursor-pointer group flex flex-col relative overflow-hidden">
                 <div class="absolute top-0 left-0 w-1 h-full bg-[#E74C3C]"></div>
-                <div class="flex justify-between items-start mb-3">
+                <div class="flex justify-between items-start mb-2">
                   <span class="text-[11px] md:text-xs font-bold uppercase tracking-wider text-[#4A90D9] bg-[#4A90D9]/10 px-2 py-1 rounded-md">Повторение</span>
                 </div>
-                <h3 class="font-bold text-base md:text-lg mb-4 flex-grow group-hover:text-[#4A90D9] transition-colors leading-tight">${plan.topic}</h3>
-                <div class="text-[13px] md:text-sm font-bold text-[#E74C3C] flex items-center gap-1"><i class="ph ph-warning-circle"></i> Пора повторить</div>
+                <h3 class="font-bold text-sm md:text-base mb-3 flex-grow group-hover:text-[#4A90D9] transition-colors leading-tight">${plan.topic}</h3>
+                <div class="text-[12px] md:text-sm font-bold text-[#E74C3C] flex items-center gap-1"><i class="ph ph-warning-circle"></i> Пора повторить</div>
               </div>
             `).join('');
 
             if (reviews.length === 0) {
               reviewCards = `
-                <div class="col-span-full bg-white rounded-2xl border border-[#E8E4DF] p-6 md:p-8 text-center text-[#7A7570] shadow-sm">
-                  <i class="ph-fill ph-check-circle text-5xl mx-auto mb-3 text-[#5CB85C] opacity-50 block"></i>
-                  <p class="font-bold text-base md:text-lg text-[#2D2A26]">На сегодня нет планов для повторения!</p>
-                  <p class="mt-1 mb-4 text-sm md:text-base">Вы молодец. Можете взять новые темы из каталога.</p>
-                  <button onclick="actions.setView('catalog')" class="bg-[#4A90D9]/10 text-[#4A90D9] font-bold px-4 py-2 rounded-lg hover:bg-[#4A90D9]/20 transition-colors text-sm md:text-base">Перейти в каталог</button>
+                <div class="col-span-full bg-white rounded-2xl border border-[#E8E4DF] p-6 text-center text-[#7A7570] shadow-sm">
+                  <i class="ph-fill ph-check-circle text-4xl mx-auto mb-2 text-[#5CB85C] opacity-50 block"></i>
+                  <p class="font-bold text-sm md:text-base text-[#2D2A26]">На сегодня нет планов для повторения!</p>
+                  <p class="mt-1 text-sm">Вы молодец. Можете взять новые темы из каталога.</p>
                 </div>`;
             }
 
             return `
-              <div class="mb-6 md:mb-8">
-                <h2 class="text-2xl md:text-3xl font-bold mb-2">С возвращением! 👋</h2>
-                <p class="text-[#7A7570] text-sm md:text-base">Ваша статистика и планы на сегодня.</p>
-              </div>
-              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-8">
-                <div class="bg-white p-5 md:p-6 rounded-2xl border border-[#E8E4DF] shadow-sm flex items-center gap-4">
-                  <div class="bg-[#4A90D9]/10 p-3 md:p-4 rounded-xl text-[#4A90D9]"><i class="ph-fill ph-chart-bar text-2xl md:text-3xl"></i></div>
-                  <div>
-                    <div class="text-2xl md:text-3xl font-black text-[#2D2A26]">${Object.keys(state.progress).length}</div>
-                    <div class="text-xs md:text-sm font-bold text-[#7A7570] uppercase tracking-wider mt-1">Изучено</div>
+              <div class="flex flex-col h-full overflow-hidden">
+                <div class="shrink-0 mb-4 md:mb-5">
+                  <h2 class="text-2xl md:text-3xl font-bold mb-1">С возвращением! 👋</h2>
+                  <p class="text-[#7A7570] text-sm md:text-base">Ваша статистика и планы на сегодня.</p>
+                </div>
+                
+                <div class="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-5">
+                  <div class="bg-white p-3 rounded-2xl border border-[#E8E4DF] shadow-sm flex flex-col items-center justify-center text-center">
+                    <i class="ph-fill ph-chart-bar text-2xl md:text-3xl text-[#4A90D9] mb-1"></i>
+                    <span class="text-2xl md:text-3xl font-black text-[#2D2A26] leading-none mb-1">${Object.keys(state.progress).length}</span>
+                    <span class="text-[10px] md:text-[11px] font-bold text-[#7A7570] uppercase tracking-wider">Изучено</span>
+                  </div>
+                  <div class="bg-white p-3 rounded-2xl border border-[#E8E4DF] shadow-sm flex flex-col items-center justify-center text-center">
+                    <i class="ph-fill ph-medal text-2xl md:text-3xl text-[#5CB85C] mb-1"></i>
+                    <span class="text-2xl md:text-3xl font-black text-[#2D2A26] leading-none mb-1">${Object.values(state.progress).filter(p => p.status === 'mastered').length}</span>
+                    <span class="text-[10px] md:text-[11px] font-bold text-[#7A7570] uppercase tracking-wider">Идеально</span>
+                  </div>
+                  <div class="bg-white p-3 rounded-2xl border border-[#E8E4DF] shadow-sm flex flex-col items-center justify-center text-center border-b-4 border-b-[#F5A623]">
+                    <i class="ph-fill ph-fire text-2xl md:text-3xl text-[#F5A623] mb-1"></i>
+                    <span class="text-2xl md:text-3xl font-black text-[#2D2A26] leading-none mb-1">${state.streak.count} дн.</span>
+                    <span class="text-[10px] md:text-[11px] font-bold text-[#7A7570] uppercase tracking-wider">Ударный режим</span>
+                  </div>
+                  <button onclick="actions.startBlitz()" class="bg-gradient-to-br from-[#4A90D9] to-[#8E54E9] p-3 rounded-2xl text-white shadow-md hover:shadow-lg transition-all flex flex-col items-center justify-center group active:scale-95 border-b-4 border-b-[#7a42d4]">
+                    <i class="ph-fill ph-lightning text-3xl md:text-4xl text-[#F5A623] mb-1 group-hover:scale-110 transition-transform"></i>
+                    <span class="font-bold text-[12px] md:text-sm uppercase tracking-wide">Блиц-тест</span>
+                  </button>
+                </div>
+
+                <div class="shrink-0 mb-3 flex items-center gap-2">
+                  <i class="ph-fill ph-calendar-blank text-[#4A90D9] text-xl"></i> 
+                  <h3 class="text-lg md:text-xl font-bold">План на сегодня</h3>
+                </div>
+                
+                <div class="flex-grow overflow-y-auto pr-1 md:pr-2 pb-6">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                    ${reviewCards}
                   </div>
                 </div>
-                <div class="bg-white p-5 md:p-6 rounded-2xl border border-[#E8E4DF] shadow-sm flex items-center gap-4">
-                  <div class="bg-[#5CB85C]/10 p-3 md:p-4 rounded-xl text-[#5CB85C]"><i class="ph-fill ph-medal text-2xl md:text-3xl"></i></div>
-                  <div>
-                    <div class="text-2xl md:text-3xl font-black text-[#2D2A26]">${Object.values(state.progress).filter(p => p.status === 'mastered').length}</div>
-                    <div class="text-xs md:text-sm font-bold text-[#7A7570] uppercase tracking-wider mt-1">Идеально</div>
-                  </div>
-                </div>
-                <div class="bg-white p-5 md:p-6 rounded-2xl border border-[#E8E4DF] shadow-sm flex items-center gap-4 border-b-4 border-b-[#F5A623] sm:col-span-2 md:col-span-1">
-                  <div class="bg-[#F5A623]/10 p-3 md:p-4 rounded-xl text-[#F5A623]"><i class="ph-fill ph-fire text-2xl md:text-3xl"></i></div>
-                  <div>
-                    <div class="text-2xl md:text-3xl font-black text-[#2D2A26]">${state.streak.count} дн.</div>
-                    <div class="text-xs md:text-sm font-bold text-[#7A7570] uppercase tracking-wider mt-1">Ударный режим</div>
-                  </div>
-                </div>
-              </div>
-              <h3 class="text-lg md:text-xl font-bold mb-4 flex items-center gap-2"><i class="ph-fill ph-calendar-blank text-[#4A90D9] text-xl md:text-2xl"></i> План на сегодня</h3>
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">${reviewCards}</div>
-              <div class="mt-8 bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] rounded-3xl p-6 md:p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-lg gap-6">
-                <div class="text-center md:text-left">
-                  <h3 class="text-xl md:text-2xl font-bold mb-2 flex items-center justify-center md:justify-start gap-2"><i class="ph-fill ph-lightning text-[#F5A623] text-2xl md:text-3xl"></i> Блиц-тест</h3>
-                  <p class="opacity-90 text-sm md:text-base max-w-md">60 секунд. Случайная тема. Отличная встряска для мозга перед экзаменом.</p>
-                </div>
-                <button onclick="actions.startBlitz()" class="w-full md:w-auto bg-white text-[#4A90D9] px-6 md:px-8 py-3 rounded-xl font-bold text-base md:text-lg hover:bg-gray-100 transition-colors shadow-sm flex items-center justify-center gap-2 shrink-0">
-                  <i class="ph-fill ph-play text-xl"></i> Начать Блиц
-                </button>
               </div>
             `;
           }
 
           if (state.view === 'catalog') {
             return `
-              <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h2 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">Каталог планов</h2>
-                  <p class="text-[#7A7570] text-sm md:text-base">Задание 24. Выберите тему для тренировки.</p>
+              <div class="flex flex-col h-full overflow-hidden">
+                <div class="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 md:mb-5">
+                  <div>
+                    <h2 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">Каталог планов</h2>
+                    <p class="text-[#7A7570] text-sm md:text-base">Задание 24. Выберите тему для тренировки.</p>
+                  </div>
+                  <div class="relative w-full md:w-80 shrink-0">
+                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7570] text-lg"></i>
+                    <input type="text" value="${state.searchQuery}" onkeyup="actions.setSearch(event.target.value)" placeholder="Поиск (темы, синонимы)..." class="w-full pl-10 pr-4 py-2 rounded-xl border border-[#E8E4DF] bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9] transition-all text-sm md:text-base">
+                  </div>
                 </div>
-                <div class="relative w-full md:w-80 shrink-0">
-                  <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7570] text-lg"></i>
-                  <input type="text" value="${state.searchQuery}" onkeyup="actions.setSearch(event.target.value)" placeholder="Поиск (темы, синонимы)..." class="w-full pl-10 pr-4 py-2 rounded-xl border border-[#E8E4DF] bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9] transition-all text-sm md:text-base">
+                
+                <div id="block-filters" class="shrink-0 flex overflow-x-auto gap-2 pb-2 mb-3 no-scrollbar">
+                  ${window.generateBlockFilters()}
                 </div>
-              </div>
-              
-              <!-- Фильтры по блокам (Скроллинг на мобильных) -->
-              <div id="block-filters" class="flex overflow-x-auto gap-2 pb-4 mb-2 no-scrollbar">
-                ${window.generateBlockFilters()}
-              </div>
 
-              <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-                ${window.generateCatalogGrid()}
+                <div class="flex-grow overflow-y-auto pr-1 md:pr-2 pb-6">
+                  <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+                    ${window.generateCatalogGrid()}
+                  </div>
+                </div>
               </div>
             `;
           }
@@ -662,30 +680,30 @@
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
             const isBlitz = state.view === 'blitz';
             return `
-              <div class="max-w-3xl mx-auto">
-                <div class="flex justify-between items-center mb-4 md:mb-6">
+              <div class="h-full overflow-y-auto pr-1 md:pr-2 pb-6 flex flex-col">
+                <div class="flex justify-between items-center mb-4 md:mb-5 shrink-0">
                   <button onclick="actions.setView('catalog')" class="flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors text-sm md:text-base">
                     <i class="ph ph-arrow-left text-lg"></i> ${isBlitz ? 'Сдаться' : 'В каталог'}
                   </button>
                   ${isBlitz ? `<div id="blitz-timer" class="text-2xl md:text-4xl font-black bg-white px-4 md:px-6 py-1 md:py-2 rounded-xl md:rounded-2xl border-2 shadow-sm text-[#4A90D9] border-[#E8E4DF]">00:${state.timeLeft.toString().padStart(2, '0')}</div>` : ''}
                 </div>
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col min-h-[500px] md:min-h-[600px]">
-                  <div class="p-4 md:p-8 border-b border-[#E8E4DF] ${isBlitz ? 'bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] text-white' : 'bg-gray-50/50'}">
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow min-h-[500px]">
+                  <div class="p-4 md:p-6 border-b border-[#E8E4DF] shrink-0 ${isBlitz ? 'bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] text-white' : 'bg-gray-50/50'}">
                     <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider ${isBlitz ? 'opacity-80' : 'text-[#4A90D9]'} mb-1 md:mb-2 block">${plan.section}</span>
-                    <h2 class="text-xl md:text-3xl font-bold leading-tight">${plan.topic}</h2>
+                    <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
-                  <div class="flex-grow p-4 md:p-8 flex flex-col">
+                  <div class="flex-grow p-4 md:p-6 flex flex-col">
                     ${!isBlitz ? `
-                    <div class="mb-4 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
+                    <div class="mb-4 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF] shrink-0">
                       <p class="font-semibold mb-1 text-[#2D2A26]">Инструкция:</p>
                       <ul class="list-disc pl-4 space-y-1">
                         <li>Каждая новая строка — это новый пункт. Для подпункта добавьте пробел или тире в начале.</li>
                         <li>Минимум 3 пункта, детализированных в подпунктах.</li>
                       </ul>
                     </div>` : ''}
-                    <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите...' : '1. Понятие...'}" class="flex-grow w-full resize-none p-3 md:p-4 font-mono text-[14px] md:text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all outline-none min-h-[250px]" spellcheck="false" autofocus>${state.userDraft}</textarea>
+                    <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите...' : '1. Понятие...'}" class="flex-grow w-full resize-none p-3 md:p-4 font-mono text-[14px] md:text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all outline-none" spellcheck="false" autofocus>${state.userDraft}</textarea>
                   </div>
-                  <div class="p-4 md:p-6 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div class="p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 shrink-0 flex flex-col sm:flex-row justify-between items-center gap-3">
                     ${!isBlitz ? `<button onclick="actions.useHint()" class="text-[#7A7570] hover:text-[#2D2A26] font-medium text-xs md:text-sm px-4 py-2 w-full sm:w-auto text-center border border-[#E8E4DF] sm:border-transparent rounded-lg sm:rounded-none bg-white sm:bg-transparent">Нужна подсказка</button>` : '<div class="hidden sm:block"></div>'}
                     <button id="check-btn" onclick="actions.finishTraining(${isBlitz})" ${(!isBlitz && state.userDraft.trim().length < 10) ? 'disabled' : ''} class="w-full sm:w-auto ${isBlitz ? 'bg-[#2D2A26] hover:bg-black' : 'bg-[#4A90D9] hover:bg-[#3A7BC0] disabled:bg-gray-300 disabled:cursor-not-allowed'} text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> ${isBlitz ? 'Завершить' : 'Проверить план'}
@@ -709,22 +727,22 @@
             `).join('');
 
             return `
-              <div class="max-w-3xl mx-auto">
-                <button onclick="actions.setView('catalog')" class="flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 md:mb-6 font-medium transition-colors text-sm md:text-base">
+              <div class="h-full overflow-y-auto pr-1 md:pr-2 pb-6 flex flex-col">
+                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 md:mb-5 font-medium transition-colors text-sm md:text-base self-start">
                   <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
                 </button>
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col min-h-[500px] md:min-h-[600px]">
-                  <div class="p-4 md:p-8 border-b border-[#E8E4DF] bg-gray-50/50">
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow">
+                  <div class="shrink-0 p-4 md:p-6 border-b border-[#E8E4DF] bg-gray-50/50">
                     <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#F5A623] mb-1 md:mb-2 flex items-center gap-1"><i class="ph-fill ph-puzzle-piece text-lg"></i> Заполни пробелы</span>
-                    <h2 class="text-xl md:text-3xl font-bold leading-tight">${plan.topic}</h2>
+                    <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
-                  <div class="flex-grow p-4 md:p-8 space-y-4">
+                  <div class="flex-grow p-4 md:p-6">
                     <div class="mb-4 md:mb-6 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
                        Впишите термины по смыслу. Оценки выставляются лояльно (синонимы работают).
                     </div>
                     <div class="space-y-3 md:space-y-4">${blanksHTML}</div>
                   </div>
-                  <div class="p-4 md:p-6 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-end">
+                  <div class="shrink-0 p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-end">
                     <button onclick="actions.finishBlanks()" class="w-full sm:w-auto bg-[#F5A623] hover:bg-[#E09612] text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> Проверить
                     </button>
@@ -756,7 +774,7 @@
             const avgScore = progressValues.length > 0 ? Math.round(progressValues.reduce((acc, p) => acc + p.bestScore, 0) / progressValues.length) : 0;
 
             return `
-              <div class="max-w-4xl mx-auto">
+              <div class="h-full overflow-y-auto pr-1 md:pr-2 pb-6">
                 <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Подробная статистика</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
                    <div class="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col justify-center items-center text-center">
@@ -798,7 +816,7 @@
             `).join('');
 
             return `
-              <div id="comparison-report">
+              <div id="comparison-report" class="h-full overflow-y-auto pr-1 md:pr-2 pb-6">
                  <div class="flex flex-col md:flex-row justify-between items-center mb-6 print-hidden gap-4">
                   <button onclick="actions.setView('catalog')" class="w-full md:w-auto flex items-center justify-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors border border-[#E8E4DF] md:border-transparent py-2 md:py-0 rounded-lg md:rounded-none bg-white md:bg-transparent text-sm md:text-base">
                     <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
@@ -883,7 +901,7 @@
           const app = document.getElementById('app');
           app.innerHTML = `
             ${getHeaderHTML()}
-            <main class="max-w-5xl w-full mx-auto px-4 md:px-6 mt-6 md:mt-8" id="main-content">
+            <main class="flex-grow overflow-hidden w-full max-w-5xl mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2 flex flex-col" id="main-content">
                ${getViewHTML()}
             </main>
             ${getModalHTML()}
