@@ -653,6 +653,7 @@
           authMode: 'login',
           searchQuery: '',
           selectedBlock: 'all',
+          selectedTemplate: 'all', // НОВОЕ: фильтр по шаблону
           selectedPlanId: null,
           userDraft: '',
           comparisonResult: null,
@@ -660,10 +661,13 @@
           expandedTemplate: null,
           expandedDay: null,
           viewTemplateModal: null,
-          imageModalData: null, // Для мобильного окна "Поделиться"
+          imageModalData: null,
           blanksData: [],
           timeLeft: 60,
           timerRef: null,
+          playlist: [], // НОВОЕ: Очередь планов
+          playlistIndex: 0, // НОВОЕ: Текущий план в очереди
+          currentTrainingMode: 'classic', // НОВОЕ: Запоминаем текущий режим для серии
           progress: JSON.parse(localStorage.getItem('ege_plan_progress') || '{}'),
           streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}'),
           timeStats: JSON.parse(localStorage.getItem('ege_plan_time_stats') || '{}')
@@ -820,6 +824,11 @@
             render();
           },
 
+          setTemplate: (t) => {
+            state.selectedTemplate = t;
+            render();
+          },
+
           updateDraft: (val) => {
             state.userDraft = val;
             if (state.view === 'training') {
@@ -888,6 +897,34 @@
             render();
           },
 
+          startTemplatePlaylist: (templateId) => {
+             const validIds = Object.keys(PLAN_TO_TEMPLATE).filter(id => PLAN_TO_TEMPLATE[id] === templateId).map(Number);
+             let pool = PLANS_DB.filter(p => validIds.includes(p.id));
+
+             if (pool.length === 0) return;
+
+             let unmastered = pool.filter(p => !state.progress[p.id] || state.progress[p.id].status !== 'mastered');
+             if (unmastered.length === 0) unmastered = pool;
+
+             // Перемешиваем планы внутри серии
+             unmastered.sort(() => Math.random() - 0.5);
+
+             state.playlist = unmastered.map(p => p.id);
+             state.playlistIndex = 0;
+             actions.openModal(state.playlist[0]);
+          },
+
+          nextPlaylistPlan: () => {
+             if (state.playlistIndex < state.playlist.length - 1) {
+                 state.playlistIndex++;
+                 const nextId = state.playlist[state.playlistIndex];
+                 actions.startTraining(nextId, state.currentTrainingMode);
+             } else {
+                 state.playlist = [];
+                 actions.setView('catalog');
+             }
+          },
+
           studyRandomPlanFromTemplate: (templateId) => {
              const validIds = Object.keys(PLAN_TO_TEMPLATE).filter(id => PLAN_TO_TEMPLATE[id] === templateId).map(Number);
              let pool = PLANS_DB.filter(p => validIds.includes(p.id));
@@ -907,7 +944,13 @@
             state.selectedPlanId = id;
             state.modeSelectorId = null;
             state.comparisonResult = null;
-            clearInterval(state.timerRef); // На всякий случай очищаем таймер
+            state.currentTrainingMode = mode;
+            clearInterval(state.timerRef);
+
+            // Если пользователь запустил другой план вручную, сбрасываем текущую серию
+            if (state.playlist.length > 0 && id !== state.playlist[state.playlistIndex]) {
+               state.playlist = [];
+            }
 
             if (mode === 'study') {
               state.view = 'study';
@@ -1246,10 +1289,24 @@
           }).join('');
         };
 
+        window.generateTemplateFilters = function() {
+          const templatesList = [{id: 'all', name: 'Все шаблоны'}, ...TEMPLATES];
+          return templatesList.map(t => {
+            const isActive = state.selectedTemplate === t.id;
+            const label = t.name;
+            const activeClasses = 'bg-[#F5A623] text-white border-[#F5A623] shadow-sm';
+            const inactiveClasses = 'bg-white border-[#E8E4DF] text-[#7A7570] hover:border-[#F5A623] hover:text-[#F5A623]';
+            return `<button onclick="actions.setTemplate('${t.id}')" class="whitespace-nowrap px-3 md:px-4 py-1.5 rounded-full border text-xs md:text-sm font-bold transition-colors shrink-0 flex items-center gap-1 ${isActive ? activeClasses : inactiveClasses}">
+              ${t.id !== 'all' ? `<i class="ph-fill ph-magic-wand ${isActive ? 'text-white' : 'text-[#F5A623]'}"></i>` : ''} ${label}
+            </button>`;
+          }).join('');
+        };
+
         window.generateCatalogGrid = function() {
           const query = state.searchQuery.toLowerCase();
           const filtered = PLANS_DB.filter(plan => {
             if (state.selectedBlock !== 'all' && plan.section !== state.selectedBlock) return false;
+            if (state.selectedTemplate !== 'all' && PLAN_TO_TEMPLATE[plan.id] !== state.selectedTemplate) return false;
             if (!query) return true;
             return plan.topic.toLowerCase().includes(query) || plan.aliases.some(a => a.toLowerCase().includes(query));
           });
@@ -1499,8 +1556,8 @@
                              <b>🧠 Подсказка:</b> ${t.tip}
                            </div>
 
-                           <button onclick="actions.studyRandomPlanFromTemplate('${t.id}')" class="w-full bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
-                             <i class="ph-fill ph-student text-lg"></i> Тренировать случайный план по этому шаблону
+                           <button onclick="actions.startTemplatePlaylist('${t.id}')" class="w-full bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm">
+                             <i class="ph-fill ph-cards text-lg"></i> Пройти серию неизученных планов этого шаблона
                            </button>
                         </div>
                       ` : ''}
@@ -1525,12 +1582,18 @@
                   </div>
                 </div>
                 
-                <div id="block-filters" class="shrink-0 flex overflow-x-auto gap-2 pb-2 mb-3 no-scrollbar">
+                <div id="block-filters" class="shrink-0 flex overflow-x-auto gap-2 pb-2 mb-2 no-scrollbar">
                   ${window.generateBlockFilters()}
                 </div>
+                
+                <div id="template-filters" class="shrink-0 flex overflow-x-auto gap-2 pb-2 mb-3 no-scrollbar">
+                  ${window.generateTemplateFilters()}
+                </div>
 
-                <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-                  ${window.generateCatalogGrid()}
+                <div class="flex-grow overflow-y-auto custom-scroll pr-1 md:pr-2 pb-6">
+                  <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+                    ${window.generateCatalogGrid()}
+                  </div>
                 </div>
               </div>
             `;
@@ -1538,13 +1601,7 @@
 
           if (state.view === 'study') {
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
-            
-            const templateId = PLAN_TO_TEMPLATE[plan.id];
-            const template = templateId ? TEMPLATES.find(t => t.id === templateId) : null;
-
-            let templateBannerHTML = '';
-            if (template) {
-              templateBannerHTML = `
+            const hasNextInPlaylist = state.playlist.length > 0 && state.playlistIndex < state.playlist.length - 1;
                 <div class="mb-5 bg-[#FFF9F0] p-4 rounded-2xl border border-[#F5A623]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
                   <div>
                     <span class="text-[10px] font-bold text-[#F5A623] uppercase tracking-wider mb-1 block">Умная подготовка</span>
@@ -1601,6 +1658,11 @@
                   </div>
 
                   <div class="shrink-0 mt-auto p-4 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3 rounded-b-2xl md:rounded-b-3xl">
+                    ${hasNextInPlaylist ? `
+                      <button onclick="actions.nextPlaylistPlan()" class="w-full sm:w-auto bg-[#5CB85C] hover:bg-[#4CAe4C] text-white font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base sm:mr-auto">
+                        <i class="ph-fill ph-arrow-circle-right text-lg"></i> След. по шаблону
+                      </button>
+                    ` : ''}
                     <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-puzzle-piece text-lg"></i> Заполнить пробелы
                     </button>
@@ -1785,6 +1847,7 @@
           if (state.view === 'comparison') {
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
             const res = state.comparisonResult;
+            const hasNextInPlaylist = state.playlist.length > 0 && state.playlistIndex < state.playlist.length - 1;
             
             const referenceHTML = res.results.map((pm, idx) => `
               <div class="border-l-2 md:border-l-4 pl-1.5 sm:pl-3 md:pl-4 py-0.5 md:py-1" style="border-color: ${pm.matched ? '#5CB85C' : '#E74C3C'}">
@@ -1815,6 +1878,8 @@
                   <div class="flex w-full sm:w-auto gap-2">
                     ${res.isBlitz 
                       ? `<button onclick="actions.startBlitz()" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-[#8E54E9] hover:bg-[#7a42d4] text-white font-bold px-3 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-colors shadow-sm animate-pulse text-sm md:text-base"><i class="ph-fill ph-lightning text-lg"></i> След. Блиц</button>` 
+                      : hasNextInPlaylist
+                      ? `<button onclick="actions.nextPlaylistPlan()" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-[#5CB85C] hover:bg-[#4CAe4C] text-white font-bold px-3 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-colors shadow-sm animate-pulse text-sm md:text-base"><i class="ph-fill ph-magic-wand text-lg"></i> След. по шаблону</button>`
                       : ''}
                     <button id="screenshot-btn" onclick="actions.copyScreenshot()" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-3 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base border border-transparent"><i class="ph ph-camera text-lg"></i> Сохранить отчёт</button>
                   </div>
@@ -1928,11 +1993,16 @@
 
         function getModalHTML() {
           if (!state.modeSelectorId) return '';
+          const isPlaylist = state.playlist.length > 0;
+
           return `
             <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
               <div class="bg-white rounded-2xl md:rounded-3xl shadow-2xl max-w-2xl w-full border border-[#E8E4DF] flex flex-col max-h-[90vh]">
                 <div class="p-4 md:p-6 border-b border-[#E8E4DF] flex justify-between items-center bg-gray-50/50 shrink-0 rounded-t-2xl md:rounded-t-3xl">
-                  <h3 class="text-lg md:text-xl font-bold">Выберите режим</h3>
+                  <div>
+                    <h3 class="text-lg md:text-xl font-bold">Выберите режим</h3>
+                    ${isPlaylist ? `<div class="text-[11px] md:text-xs text-[#F5A623] font-bold mt-1 bg-yellow-50 border border-yellow-100 inline-block px-2 py-0.5 rounded-md">Серия: ${state.playlist.length} планов</div>` : ''}
+                  </div>
                   <button onclick="actions.closeModal()" class="text-[#7A7570] hover:text-[#E74C3C] transition-colors p-1"><i class="ph ph-x text-xl md:text-2xl"></i></button>
                 </div>
                 <div class="p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 overflow-y-auto custom-scroll">
