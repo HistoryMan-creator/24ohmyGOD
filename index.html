@@ -605,7 +605,7 @@
               clone.style.left = '-9999px';
               clone.style.top = '0';
               clone.style.width = target.offsetWidth + 'px'; 
-              clone.style.height = 'auto'; // Свободный рост в высоту
+              clone.style.height = 'auto'; 
               
               document.body.appendChild(clone);
 
@@ -656,7 +656,7 @@
                 setTimeout(() => {
                   btn.innerHTML = originalHTML;
                   btn.disabled = false;
-                  btn.className = "w-full md:w-auto flex items-center justify-center gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-4 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base border border-transparent";
+                  btn.className = "w-full sm:w-auto flex items-center justify-center gap-1.5 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-3 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base border border-transparent";
                 }, 3000);
               }, 'image/png');
             } catch (err) {
@@ -1080,22 +1080,22 @@
             const res = state.comparisonResult;
             
             const referenceHTML = res.results.map((pm, idx) => `
-              <div class="border-l-4 pl-3 md:pl-4 py-1" style="border-color: ${pm.matched ? '#5CB85C' : '#E74C3C'}">
-                <div class="flex items-start gap-2 cursor-pointer hover:bg-gray-100 p-1 md:p-1.5 -ml-1 md:-ml-1.5 rounded-lg transition-colors select-none group" onclick="actions.toggleMatch(${idx})" title="Кликните, чтобы изменить оценку пункта">
-                  ${pm.matched ? '<i class="ph-fill ph-check-circle text-[#5CB85C] mt-[3px] shrink-0 group-hover:scale-110 transition-transform text-base md:text-lg"></i>' : '<i class="ph-fill ph-x-circle text-[#E74C3C] mt-[3px] shrink-0 group-hover:scale-110 transition-transform text-base md:text-lg"></i>'}
-                  <span class="font-bold text-[14px] md:text-base ${pm.matched ? 'text-[#2D2A26]' : 'text-[#7A7570]'}">${idx + 1}. ${pm.text}</span>
+              <div class="border-l-2 md:border-l-4 pl-1.5 sm:pl-3 md:pl-4 py-0.5 md:py-1" style="border-color: ${pm.matched ? '#5CB85C' : '#E74C3C'}">
+                <div class="flex items-start gap-1 md:gap-2 cursor-pointer hover:bg-gray-100 p-0.5 sm:p-1 md:p-1.5 -ml-1 md:-ml-1.5 rounded-lg transition-colors select-none group" onclick="actions.toggleMatch(${idx})" title="Кликните, чтобы изменить оценку пункта">
+                  ${pm.matched ? '<i class="ph-fill ph-check-circle text-[#5CB85C] mt-[2px] md:mt-[3px] shrink-0 group-hover:scale-110 transition-transform text-sm md:text-lg"></i>' : '<i class="ph-fill ph-x-circle text-[#E74C3C] mt-[2px] md:mt-[3px] shrink-0 group-hover:scale-110 transition-transform text-sm md:text-lg"></i>'}
+                  <span class="font-bold text-[11px] sm:text-[13px] md:text-base leading-tight ${pm.matched ? 'text-[#2D2A26]' : 'text-[#7A7570]'}">${idx + 1}. ${pm.text}</span>
                 </div>
                 ${pm.subpoints.length > 0 ? `
-                  <ul class="mt-1 md:mt-2 space-y-1">
+                  <ul class="mt-0.5 md:mt-2 space-y-0.5 md:space-y-1">
                     ${pm.subpoints.map((sm, subIdx) => `
-                      <li class="flex items-start gap-2 pl-5 md:pl-6 p-1 -ml-1 rounded-lg select-none ${res.ignoreSubpoints ? '' : 'cursor-pointer hover:bg-gray-100 transition-colors group'}" ${!res.ignoreSubpoints ? `onclick="actions.toggleMatch(${idx}, ${subIdx})"` : ''}>
-                        ${res.ignoreSubpoints ? '<span class="text-[#7A7570] font-bold opacity-50 text-sm md:text-lg mt-[-2px]">•</span>' : (sm.matched ? '<span class="text-[#5CB85C] font-bold group-hover:scale-125 transition-transform inline-block text-[12px] md:text-base mt-[2px] md:mt-0">✓</span>' : '<span class="text-[#E74C3C] font-bold opacity-50 group-hover:scale-125 transition-transform inline-block text-[12px] md:text-base mt-[2px] md:mt-0">✗</span>')}
-                        <span class="text-[13px] md:text-sm ${!res.ignoreSubpoints && sm.matched ? 'text-[#2D2A26]' : 'text-[#7A7570] opacity-80'}">${String.fromCharCode(1072 + subIdx)}) ${sm.text}</span>
+                      <li class="flex items-start gap-1 md:gap-2 pl-3 sm:pl-5 md:pl-6 p-0.5 md:p-1 -ml-1 rounded-lg select-none ${res.ignoreSubpoints ? '' : 'cursor-pointer hover:bg-gray-100 transition-colors group'}" ${!res.ignoreSubpoints ? `onclick="actions.toggleMatch(${idx}, ${subIdx})"` : ''}>
+                        ${res.ignoreSubpoints ? '<span class="text-[#7A7570] font-bold opacity-50 text-[10px] md:text-lg mt-[-2px]">•</span>' : (sm.matched ? '<span class="text-[#5CB85C] font-bold group-hover:scale-125 transition-transform inline-block text-[10px] sm:text-[12px] md:text-base mt-[2px] md:mt-0">✓</span>' : '<span class="text-[#E74C3C] font-bold opacity-50 group-hover:scale-125 transition-transform inline-block text-[10px] sm:text-[12px] md:text-base mt-[2px] md:mt-0">✗</span>')}
+                        <span class="text-[10px] sm:text-[12px] md:text-sm leading-tight ${!res.ignoreSubpoints && sm.matched ? 'text-[#2D2A26]' : 'text-[#7A7570] opacity-80'}">${String.fromCharCode(1072 + subIdx)}) ${sm.text}</span>
                       </li>
                     `).join('')}
                   </ul>
                 ` : ''}
-                ${pm.subpoints.length > 0 && res.ignoreSubpoints ? `<div class="mt-2 text-[11px] md:text-xs text-[#4A90D9] italic pl-5 md:pl-6">* В блице подпункты показаны для справки</div>` : ''}
+                ${pm.subpoints.length > 0 && res.ignoreSubpoints ? `<div class="mt-1 md:mt-2 text-[9px] md:text-xs text-[#4A90D9] italic pl-3 sm:pl-5 md:pl-6">* В блице подпункты показаны для справки</div>` : ''}
               </div>
             `).join('');
 
@@ -1116,37 +1116,37 @@
                 <div id="screenshot-target" class="flex flex-col gap-4 bg-[#FAF7F2] p-2 -mx-2 md:p-0 md:mx-0 rounded-2xl">
                   
                   <!-- Карточка результата -->
-                  <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] p-5 md:p-6 flex flex-row items-center justify-between shadow-sm relative">
+                  <div class="bg-white rounded-xl md:rounded-3xl border border-[#E8E4DF] p-4 md:p-6 flex flex-row items-center justify-between shadow-sm relative">
                     <div class="absolute -top-3 right-4 bg-blue-50 text-[#4A90D9] text-[10px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 animate-bounce print-hidden shadow-sm border border-blue-100" data-html2canvas-ignore>
                        <i class="ph-fill ph-cursor-click"></i> Алгоритм ошибся? Кликайте на значки!
                     </div>
                     <div class="pr-4">
-                      <h2 class="text-[11px] md:text-xs font-bold text-[#7A7570] uppercase tracking-wider mb-1">Результат:</h2>
+                      <h2 class="text-[11px] md:text-xs font-bold text-[#7A7570] uppercase tracking-wider mb-0.5">Результат:</h2>
                       <p class="text-sm md:text-lg font-bold text-[#2D2A26] leading-tight">«${plan.topic}»</p>
                     </div>
-                    <div class="flex items-baseline gap-1 text-right">
+                    <div class="flex items-baseline gap-1 text-right shrink-0">
                       <span class="text-3xl md:text-5xl font-black ${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
                       <span class="text-lg md:text-2xl text-[#7A7570] font-bold">/100</span>
                     </div>
                   </div>
 
                   <!-- РАЗДЕЛЕННЫЙ ЭКРАН - ОТВЕТ СЛЕВА, ЭТАЛОН СПРАВА -->
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div class="grid grid-cols-2 gap-2 md:gap-4 items-start">
                     
-                    <div class="bg-white border border-[#E8E4DF] rounded-2xl md:rounded-3xl flex flex-col shadow-sm">
-                      <div class="p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center rounded-t-2xl md:rounded-t-3xl">
-                        <h3 class="font-bold text-sm md:text-base text-[#7A7570]">Ваш ответ</h3>
+                    <div class="bg-white border border-[#E8E4DF] rounded-xl md:rounded-3xl flex flex-col shadow-sm overflow-hidden">
+                      <div class="p-2 md:p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center shrink-0">
+                        <h3 class="font-bold text-[11px] sm:text-sm md:text-base text-[#7A7570] truncate">Ваш ответ</h3>
                       </div>
-                      <div class="p-4 md:p-5 font-mono text-[13px] md:text-[14px] leading-relaxed whitespace-pre-wrap text-[#2D2A26] break-words">
+                      <div class="p-2 sm:p-4 md:p-5 font-mono text-[10px] sm:text-[13px] md:text-[14px] leading-relaxed whitespace-pre-wrap text-[#2D2A26] break-words overflow-x-hidden">
                         ${state.userDraft || "Пустой ответ"}
                       </div>
                     </div>
                     
-                    <div class="bg-white border border-[#E8E4DF] rounded-2xl md:rounded-3xl flex flex-col shadow-sm">
-                      <div class="p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center rounded-t-2xl md:rounded-t-3xl">
-                        <h3 class="font-bold text-sm md:text-base text-[#5CB85C]">Эталонный план ФИПИ</h3>
+                    <div class="bg-white border border-[#E8E4DF] rounded-xl md:rounded-3xl flex flex-col shadow-sm overflow-hidden">
+                      <div class="p-2 md:p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center shrink-0">
+                        <h3 class="font-bold text-[11px] sm:text-sm md:text-base text-[#5CB85C] truncate">Эталон ФИПИ</h3>
                       </div>
-                      <div class="p-4 md:p-5 space-y-4 md:space-y-5">
+                      <div class="p-2 sm:p-4 md:p-5 space-y-2 sm:space-y-4 md:space-y-5 overflow-x-hidden">
                         ${referenceHTML}
                       </div>
                     </div>
@@ -1155,7 +1155,7 @@
                 </div>
                 
                 <div class="mt-6 md:mt-8 flex justify-center print-hidden">
-                   <button onclick="actions.setView('catalog')" class="w-full sm:w-auto bg-[#2D2A26] hover:bg-black text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-md text-sm md:text-base">Вернуться в каталог</button>
+                   <button onclick="actions.setView('catalog')" class="w-full sm:w-auto bg-[#2D2A26] hover:bg-black text-white font-bold py-3 md:py-3 px-8 rounded-xl transition-colors shadow-md text-sm md:text-base">Вернуться в каталог</button>
                 </div>
               </div>
             `;
