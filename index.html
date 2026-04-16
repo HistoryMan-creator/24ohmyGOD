@@ -27,21 +27,14 @@
   <style>
     body { font-family: 'Nunito', sans-serif; }
     
-    /* Скрытие полосы прокрутки для фильтров, но сохранение скролла */
+    /* Скрытие полосы прокрутки для горизонтальных фильтров */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
-    /* Кастомный тонкий скроллбар для внутренних блоков */
-    .custom-scroll::-webkit-scrollbar { width: 6px; }
-    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-    .custom-scroll::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 10px; }
-    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
-    
     /* Стили для корректной печати */
     @media print {
-      body, #app, main, .overflow-y-auto, .custom-scroll { 
+      body, #app, main { 
         height: auto !important; 
-        overflow: visible !important; 
         display: block !important; 
         background: white !important;
       }
@@ -51,11 +44,11 @@
     }
   </style>
 </head>
-<body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white h-screen w-screen flex flex-col overflow-hidden">
+<body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white min-h-screen flex flex-col">
 
-  <div id="app" class="flex-grow flex flex-col h-full overflow-hidden">
-    <!-- Заглушка загрузки (отображается доли секунды, пока грузится база данных) -->
-    <div class="flex-grow flex items-center justify-center">
+  <div id="app" class="flex-grow flex flex-col w-full">
+    <!-- Заглушка загрузки -->
+    <div class="flex-grow flex items-center justify-center min-h-[60vh]">
       <div class="animate-pulse flex flex-col items-center">
         <i class="ph ph-spinner-gap animate-spin text-4xl text-[#4A90D9] mb-4"></i>
         <p class="text-[#7A7570] font-bold">Инициализация...</p>
@@ -72,14 +65,13 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
-          .then((registration) => console.log('Service Worker успешно зарегистрирован:', registration.scope))
-          .catch((error) => console.log('Ошибка регистрации Service Worker:', error));
+          .catch((error) => console.log('Ошибка регистрации SW:', error));
       });
     }
 
     function showErrorUI(errorMessage) {
       document.getElementById('app').innerHTML = `
-        <div class="flex flex-col items-center justify-center p-4 text-center h-full overflow-y-auto">
+        <div class="flex flex-col items-center justify-center p-4 text-center min-h-[80vh]">
           <i class="ph-fill ph-warning-circle text-6xl text-[#E74C3C] mb-4"></i>
           <h1 class="text-2xl md:text-3xl font-extrabold text-[#2D2A26] mb-3">Ошибка загрузки</h1>
           <p class="text-[#7A7570] text-base md:text-lg max-w-2xl leading-relaxed mb-6">${errorMessage}</p>
@@ -109,11 +101,10 @@
         const db = getFirestore(app);
         let currentUser = null;
 
-        // Включаем оффлайн-режим для самой базы данных Firebase!
         try {
           await enableIndexedDbPersistence(db);
         } catch (err) {
-          console.warn("Оффлайн-кэш Firebase недоступен (возможно открыто несколько вкладок).", err);
+          console.warn("Оффлайн-кэш недоступен.", err);
         }
 
         // --- 2. ИМПОРТ БАЗЫ ДАННЫХ ---
@@ -279,8 +270,8 @@
 
         // --- 5. ГЛОБАЛЬНОЕ СОСТОЯНИЕ ---
         const state = {
-          view: 'dashboard', // Сразу открываем дашборд
-          isAuthReady: false, // Флаг для фоновой загрузки Firebase
+          view: 'dashboard',
+          isAuthReady: false,
           authMode: 'login',
           searchQuery: '',
           selectedBlock: 'all',
@@ -291,12 +282,11 @@
           blanksData: [],
           timeLeft: 60,
           timerRef: null,
-          // Сразу загружаем локальные данные из localStorage
           progress: JSON.parse(localStorage.getItem('ege_plan_progress') || '{}'),
           streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}')
         };
 
-        // --- 6. РАБОТА С FIREBASE FIRESTORE И ЛОКАЛЬНЫМ КЭШЕМ ---
+        // --- 6. РАБОТА С FIREBASE И КЭШЕМ ---
         async function loadUserData() {
           if (!currentUser) return;
           try {
@@ -304,13 +294,10 @@
             const snap = await getDoc(docRef);
             if (snap.exists()) {
               const data = snap.data();
-              
-              // Умное объединение: Локальный кэш (state) + Данные из облака (data)
               const cloudProgress = data.progress || {};
               const localProgress = state.progress || {};
               const mergedProgress = { ...cloudProgress };
               
-              // Если локальный скор выше или записи в облаке нет — берем локальный
               for (const key in localProgress) {
                  if (!mergedProgress[key] || localProgress[key].bestScore >= mergedProgress[key].bestScore) {
                     mergedProgress[key] = localProgress[key];
@@ -324,16 +311,11 @@
               state.streak = localStreak.count > cloudStreak.count ? localStreak : cloudStreak;
               localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
 
-              // Синхронизируем обратно, чтобы облако получило наши новые локальные данные
               saveProgressToCloud();
-
             } else {
-              // Новый аккаунт: выгружаем в него весь накопленный без регистрации локальный прогресс
               saveProgressToCloud();
             }
-          } catch(e) {
-            console.error("Ошибка загрузки данных из облака:", e);
-          }
+          } catch(e) { console.error("Ошибка загрузки данных из облака:", e); }
         }
 
         function saveProgressToCloud() {
@@ -343,10 +325,8 @@
             setDoc(docRef, {
               progress: state.progress,
               streak: state.streak
-            }, { merge: true }).catch(err => console.error("Фоновая ошибка синхронизации:", err));
-          } catch (e) {
-            console.error("Ошибка подготовки сохранения в облако:", e);
-          }
+            }, { merge: true }).catch(err => console.error(err));
+          } catch (e) { console.error(e); }
         }
 
         const saveProgressLocallyAndCloud = (score) => {
@@ -374,13 +354,10 @@
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = yesterday.toISOString().split('T')[0];
             
-            if (state.streak.lastActive === yesterdayStr) {
-              state.streak.count++;
-            } else {
-              state.streak.count = 1;
-            }
-            state.streak.lastActive = today;
+            if (state.streak.lastActive === yesterdayStr) state.streak.count++;
+            else state.streak.count = 1;
             
+            state.streak.lastActive = today;
             localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
           }
           saveProgressToCloud();
@@ -404,14 +381,9 @@
             btn.innerHTML = '<i class="ph ph-spinner-gap animate-spin text-xl"></i> Загрузка...';
 
             try {
-              if (state.authMode === 'login') {
-                await signInWithEmailAndPassword(auth, email, password);
-              } else {
-                await createUserWithEmailAndPassword(auth, email, password);
-              }
-              // После успешного входа onAuthStateChanged сработает автоматически
+              if (state.authMode === 'login') await signInWithEmailAndPassword(auth, email, password);
+              else await createUserWithEmailAndPassword(auth, email, password);
             } catch(e) {
-              console.error(e);
               let msg = "Произошла ошибка.";
               if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') msg = "Неверный email или пароль.";
               if (e.code === 'auth/email-already-in-use') msg = "Этот email уже зарегистрирован.";
@@ -424,10 +396,7 @@
             }
           },
 
-          logout: async () => {
-            await signOut(auth);
-          },
-
+          logout: async () => { await signOut(auth); },
           setView: (v) => { window.scrollTo(0,0); state.view = v; render(); },
           
           setSearch: (v) => { 
@@ -449,9 +418,7 @@
             }
           },
 
-          updateBlank: (idx, val) => {
-            state.blanksData[idx].userInput = val;
-          },
+          updateBlank: (idx, val) => { state.blanksData[idx].userInput = val; },
 
           useHint: () => {
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
@@ -481,7 +448,6 @@
               planData.plan.points.forEach((p, pIdx) => {
                 let pointHidden = Math.random() > 0.6;
                 let subpointsHidden = p.subpoints.map(() => Math.random() > 0.4);
-                
                 let allHidden = pointHidden && subpointsHidden.every(sh => sh === true);
                 if (allHidden) {
                   const totalItems = 1 + p.subpoints.length;
@@ -498,6 +464,7 @@
               state.blanksData = items;
               state.view = 'training_blanks';
             }
+            window.scrollTo(0,0);
             render();
           },
 
@@ -509,6 +476,7 @@
             state.comparisonResult = null;
             state.timeLeft = 60;
             state.view = 'blitz';
+            window.scrollTo(0,0);
             render();
 
             clearInterval(state.timerRef);
@@ -537,6 +505,7 @@
             state.comparisonResult = result;
             saveProgressLocallyAndCloud(result.score);
             state.view = 'comparison';
+            window.scrollTo(0,0);
             render();
           },
 
@@ -584,6 +553,7 @@
             state.comparisonResult = { score: finalScore, results: newResults, ignoreSubpoints: false, isBlitz: false };
             saveProgressLocallyAndCloud(finalScore);
             state.view = 'comparison';
+            window.scrollTo(0,0);
             render();
           },
 
@@ -592,11 +562,8 @@
 
             const newResults = JSON.parse(JSON.stringify(state.comparisonResult.results));
             
-            if (subIdx === null) {
-              newResults[pointIdx].matched = !newResults[pointIdx].matched;
-            } else {
-              newResults[pointIdx].subpoints[subIdx].matched = !newResults[pointIdx].subpoints[subIdx].matched;
-            }
+            if (subIdx === null) newResults[pointIdx].matched = !newResults[pointIdx].matched;
+            else newResults[pointIdx].subpoints[subIdx].matched = !newResults[pointIdx].subpoints[subIdx].matched;
 
             let scorePoints = 0, scoreSubpoints = 0, totalRefSubpoints = 0;
             const totalRefPoints = newResults.length;
@@ -633,54 +600,63 @@
             try {
               const target = document.getElementById('screenshot-target');
               
-              // Для корректного скриншота без обрезки клонируем контейнер
               const clone = target.cloneNode(true);
-              clone.style.height = 'auto';
               clone.style.position = 'absolute';
               clone.style.left = '-9999px';
+              clone.style.top = '0';
               clone.style.width = target.offsetWidth + 'px'; 
-              
-              // Раскрываем все скроллящиеся блоки внутри клона
-              const scrollables = clone.querySelectorAll('.custom-scroll, .overflow-y-auto');
-              scrollables.forEach(el => {
-                 el.classList.remove('overflow-y-auto', 'custom-scroll');
-                 el.classList.add('h-auto', 'overflow-visible');
-                 el.style.height = 'auto';
-                 el.style.maxHeight = 'none';
-              });
+              clone.style.height = 'auto'; // Свободный рост в высоту
               
               document.body.appendChild(clone);
 
               const canvas = await html2canvas(clone, { 
                 scale: 2, 
                 backgroundColor: '#FAF7F2', 
-                useCORS: true,
-                windowHeight: clone.scrollHeight
+                useCORS: true
               });
               
               document.body.removeChild(clone);
 
               canvas.toBlob(async (blob) => {
+                const finishSuccess = (text) => {
+                  btn.innerHTML = `<i class="ph-fill ph-check-circle text-lg text-white"></i> ${text}`;
+                  btn.classList.remove('bg-[#4A90D9]/10', 'text-[#4A90D9]', 'hover:bg-[#4A90D9]/20');
+                  btn.classList.add('bg-[#5CB85C]', 'text-white', 'border-transparent');
+                };
+
+                try {
+                  const file = new File([blob], 'plan_result.png', { type: 'image/png' });
+                  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                      files: [file],
+                      title: 'Результат проверки плана',
+                    });
+                    finishSuccess('Отправлено!');
+                    return;
+                  }
+                } catch (shareErr) {
+                   console.warn("Share API недоступен", shareErr);
+                }
+
                 try {
                   const item = new ClipboardItem({ 'image/png': blob });
                   await navigator.clipboard.write([item]);
-                  btn.innerHTML = '<i class="ph-fill ph-check-circle text-lg text-white"></i> Скопировано!';
-                  btn.classList.remove('bg-[#4A90D9]/10', 'text-[#4A90D9]', 'hover:bg-[#4A90D9]/20');
-                  btn.classList.add('bg-[#5CB85C]', 'text-white');
+                  finishSuccess('Скопировано!');
                 } catch (clipboardErr) {
+                  console.warn('Clipboard недоступен, скачиваем картинку...', clipboardErr);
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
                   a.download = 'plan_result.png';
                   a.click();
                   URL.revokeObjectURL(url);
-                  btn.innerHTML = '<i class="ph ph-download text-lg"></i> Сохранено как файл';
+                  finishSuccess('Сохранено!');
                 }
                 
                 setTimeout(() => {
                   btn.innerHTML = originalHTML;
                   btn.disabled = false;
-                  btn.className = "w-full md:w-auto flex items-center justify-center gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-4 py-3 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base";
+                  btn.className = "w-full md:w-auto flex items-center justify-center gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-4 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base border border-transparent";
                 }, 3000);
               }, 'image/png');
             } catch (err) {
@@ -693,11 +669,10 @@
         // --- 8. ГЕНЕРАЦИЯ HTML ИНТЕРФЕЙСА ---
 
         function getHeaderHTML() {
-          if (state.view === 'auth') return '';
+          if (['auth', 'loading', 'study', 'training', 'training_blanks', 'blitz', 'comparison'].includes(state.view)) return '';
 
           let authSectionHTML = '';
           if (!state.isAuthReady) {
-            // Скелетон загрузки
             authSectionHTML = `<div class="animate-pulse w-[80px] md:w-[100px] h-[34px] md:h-[38px] bg-gray-200 rounded-lg"></div>`;
           } else if (currentUser) {
             authSectionHTML = `
@@ -707,7 +682,7 @@
             `;
           } else {
             authSectionHTML = `
-              <button onclick="actions.setView('auth')" class="text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1.5" title="Войти или зарегистрироваться">
+              <button onclick="actions.setView('auth')" class="text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1.5" title="Войти">
                 <i class="ph-bold ph-user text-lg"></i> <span class="hidden sm:inline">Войти</span>
               </button>
             `;
@@ -740,9 +715,7 @@
                   <div class="flex items-center gap-1 bg-[#FFF0E5] text-[#F5A623] px-2 md:px-3 py-1.5 rounded-lg font-bold" title="Серия дней">
                     <i class="ph-fill ph-fire text-lg ${state.streak.count > 0 ? 'text-[#F5A623]' : 'text-gray-300'}"></i> ${state.streak.count}
                   </div>
-                  
                   ${authSectionHTML}
-                  
                 </div>
               </div>
             </header>
@@ -801,7 +774,7 @@
         function getViewHTML() {
           if (state.view === 'auth') {
             return `
-              <div class="flex-grow flex items-center justify-center px-4 min-h-[70vh] w-full relative">
+              <div class="flex-grow flex items-center justify-center px-4 w-full max-w-[1200px] mx-auto relative min-h-[70vh]">
                 <button onclick="actions.setView('dashboard')" class="absolute top-4 left-4 md:top-8 md:left-8 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors text-sm md:text-base">
                   <i class="ph ph-arrow-left text-lg"></i> На главную
                 </button>
@@ -869,7 +842,7 @@
             }
 
             return `
-              <div class="flex flex-col h-full overflow-hidden w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
+              <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
                 <div class="shrink-0 mb-4 md:mb-5">
                   <h2 class="text-2xl md:text-3xl font-bold mb-1">С возвращением! 👋</h2>
                   <p class="text-[#7A7570] text-sm md:text-base">Ваша статистика и планы на сегодня.</p>
@@ -902,10 +875,8 @@
                   <h3 class="text-lg md:text-xl font-bold">План на сегодня</h3>
                 </div>
                 
-                <div class="flex-grow overflow-y-auto custom-scroll pr-1 md:pr-2 pb-6">
-                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                    ${reviewCards}
-                  </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                  ${reviewCards}
                 </div>
               </div>
             `;
@@ -913,7 +884,7 @@
 
           if (state.view === 'catalog') {
             return `
-              <div class="flex flex-col h-full overflow-hidden w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
+              <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
                 <div class="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 md:mb-5">
                   <div>
                     <h2 class="text-2xl md:text-3xl font-bold mb-1 md:mb-2">Каталог планов</h2>
@@ -929,10 +900,8 @@
                   ${window.generateBlockFilters()}
                 </div>
 
-                <div class="flex-grow overflow-y-auto custom-scroll pr-1 md:pr-2 pb-6">
-                  <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-                    ${window.generateCatalogGrid()}
-                  </div>
+                <div id="catalog-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+                  ${window.generateCatalogGrid()}
                 </div>
               </div>
             `;
@@ -943,13 +912,13 @@
             
             const planContentHTML = plan.plan.points.map((p, idx) => `
               <div class="mb-3 break-inside-avoid">
-                <div class="font-bold text-[#2D2A26] text-[13px] md:text-[15px] leading-tight">${idx + 1}. ${p.text}</div>
+                <div class="font-bold text-[#2D2A26] text-[14px] md:text-[16px] leading-tight">${idx + 1}. ${p.text}</div>
                 ${p.subpoints.length > 0 ? `
                   <ul class="mt-1 space-y-0.5 pl-4 md:pl-5">
                     ${p.subpoints.map((sp, spIdx) => `
                       <li class="flex items-start gap-1.5">
                         <span class="text-[#4A90D9] text-[10px] mt-[3px] shrink-0">•</span>
-                        <span class="text-[#2D2A26] text-[12px] md:text-[14px] leading-tight">${String.fromCharCode(1072 + spIdx)}) ${sp}</span>
+                        <span class="text-[#2D2A26] text-[13px] md:text-[15px] leading-tight">${String.fromCharCode(1072 + spIdx)}) ${sp}</span>
                       </li>
                     `).join('')}
                   </ul>
@@ -958,35 +927,34 @@
             `).join('');
 
             return `
-              <div class="h-full flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
-                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 font-medium transition-colors text-sm md:text-base self-start">
+              <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
+                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 font-medium transition-colors text-sm md:text-base self-start bg-white border border-[#E8E4DF] px-4 py-2 rounded-lg shadow-sm">
                   <i class="ph ph-arrow-left text-lg"></i> В каталог
                 </button>
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow min-h-0">
-                  <div class="shrink-0 p-4 md:p-5 border-b border-[#E8E4DF] bg-gray-50/50">
-                    <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#5CB85C] mb-1 md:mb-2 flex items-center gap-1">
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col">
+                  <div class="shrink-0 p-4 md:p-5 border-b border-[#E8E4DF] bg-gray-50/50 rounded-t-2xl md:rounded-t-3xl">
+                    <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#5CB85C] mb-1 flex items-center gap-1">
                       <i class="ph-fill ph-student text-lg"></i> Режим изучения
                     </span>
-                    <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
+                    <h2 class="text-lg md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
                   
-                  <div class="flex-grow p-4 md:p-6 overflow-y-auto custom-scroll">
+                  <div class="p-4 md:p-6">
                     <div class="max-w-4xl mx-auto">
-                      <div class="mb-4 md:mb-5 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
-                         Внимательно прочитайте и запомните структуру идеального ответа. Когда будете готовы, выберите один из режимов тренировки.
+                      <div class="mb-4 md:mb-6 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
+                         Внимательно прочитайте структуру идеального ответа. Когда будете готовы — выберите режим тренировки.
                       </div>
-                      
                       <div class="columns-1 md:columns-2 gap-6">
                         ${planContentHTML}
                       </div>
                     </div>
                   </div>
 
-                  <div class="shrink-0 p-4 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3">
-                    <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-2 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                  <div class="shrink-0 p-4 border-t border-[#E8E4DF] bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3 rounded-b-2xl md:rounded-b-3xl">
+                    <button onclick="actions.startTraining(${plan.id}, 'blanks')" class="w-full sm:w-auto bg-white border-2 border-[#F5A623] hover:bg-[#F5A623]/10 text-[#F5A623] font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-puzzle-piece text-lg"></i> Заполнить пробелы
                     </button>
-                    <button onclick="actions.startTraining(${plan.id}, 'classic')" class="w-full sm:w-auto bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-2 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                    <button onclick="actions.startTraining(${plan.id}, 'classic')" class="w-full sm:w-auto bg-[#4A90D9] hover:bg-[#3A7BC0] text-white font-bold py-2.5 px-6 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-pen-nib text-lg"></i> Написать с нуля
                     </button>
                   </div>
@@ -999,32 +967,29 @@
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
             const isBlitz = state.view === 'blitz';
             return `
-              <div class="h-full flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
+              <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
                 <div class="flex justify-between items-center mb-4 shrink-0">
-                  <button onclick="actions.setView('catalog')" class="flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors text-sm md:text-base">
+                  <button onclick="actions.setView('catalog')" class="flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors text-sm md:text-base bg-white border border-[#E8E4DF] px-4 py-2 rounded-lg shadow-sm">
                     <i class="ph ph-arrow-left text-lg"></i> ${isBlitz ? 'Сдаться' : 'В каталог'}
                   </button>
-                  ${isBlitz ? `<div id="blitz-timer" class="text-2xl md:text-3xl font-black bg-white px-4 md:px-6 py-1 md:py-1.5 rounded-xl md:rounded-2xl border-2 shadow-sm text-[#4A90D9] border-[#E8E4DF]">00:${state.timeLeft.toString().padStart(2, '0')}</div>` : ''}
+                  ${isBlitz ? `<div id="blitz-timer" class="text-xl md:text-3xl font-black bg-white px-4 md:px-6 py-1.5 md:py-2 rounded-xl md:rounded-2xl border-2 shadow-sm text-[#4A90D9] border-[#E8E4DF]">00:${state.timeLeft.toString().padStart(2, '0')}</div>` : ''}
                 </div>
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow min-h-0">
-                  <div class="p-4 md:p-6 border-b border-[#E8E4DF] shrink-0 ${isBlitz ? 'bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] text-white' : 'bg-gray-50/50'}">
-                    <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider ${isBlitz ? 'opacity-80' : 'text-[#4A90D9]'} mb-1 md:mb-2 block">${plan.section}</span>
-                    <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col flex-grow">
+                  <div class="p-4 md:p-5 border-b border-[#E8E4DF] shrink-0 rounded-t-2xl md:rounded-t-3xl ${isBlitz ? 'bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] text-white' : 'bg-gray-50/50'}">
+                    <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider ${isBlitz ? 'opacity-80' : 'text-[#4A90D9]'} mb-1 block">${plan.section}</span>
+                    <h2 class="text-lg md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
-                  <div class="flex-grow p-4 md:p-6 flex flex-col min-h-0">
+                  <div class="flex-grow p-4 md:p-6 flex flex-col">
                     ${!isBlitz ? `
                     <div class="mb-4 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF] shrink-0">
-                      <p class="font-semibold mb-1 text-[#2D2A26]">Инструкция:</p>
-                      <ul class="list-disc pl-4 space-y-1">
-                        <li>Каждая новая строка — это новый пункт. Для подпункта добавьте пробел или тире в начале.</li>
-                        <li>Минимум 3 пункта, детализированных в подпунктах.</li>
-                      </ul>
+                      <p class="font-semibold mb-1 text-[#2D2A26]">Правила:</p>
+                      <p>Каждая новая строка — новый пункт. Для подпункта поставьте тире или пробел в начале. Минимум 3 пункта с подпунктами.</p>
                     </div>` : ''}
-                    <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите...' : '1. Понятие...'}" class="flex-grow w-full resize-none p-3 md:p-4 font-mono text-[14px] md:text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all outline-none min-h-[250px]" spellcheck="false" autofocus>${state.userDraft}</textarea>
+                    <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите...' : '1. Понятие...'}" class="flex-grow w-full min-h-[40vh] md:min-h-[50vh] p-3 md:p-4 font-mono text-[14px] md:text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all outline-none" spellcheck="false" autofocus>${state.userDraft}</textarea>
                   </div>
-                  <div class="p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 shrink-0 flex flex-col sm:flex-row justify-between items-center gap-3">
-                    ${!isBlitz ? `<button onclick="actions.useHint()" class="text-[#7A7570] hover:text-[#2D2A26] font-medium text-xs md:text-sm px-4 py-2 w-full sm:w-auto text-center border border-[#E8E4DF] sm:border-transparent rounded-lg sm:rounded-none bg-white sm:bg-transparent">Нужна подсказка</button>` : '<div class="hidden sm:block"></div>'}
-                    <button id="check-btn" onclick="actions.finishTraining(${isBlitz})" ${(!isBlitz && state.userDraft.trim().length < 10) ? 'disabled' : ''} class="w-full sm:w-auto ${isBlitz ? 'bg-[#2D2A26] hover:bg-black' : 'bg-[#4A90D9] hover:bg-[#3A7BC0] disabled:bg-gray-300 disabled:cursor-not-allowed'} text-white font-bold py-2.5 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                  <div class="p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 shrink-0 flex flex-col sm:flex-row justify-between items-center gap-3 rounded-b-2xl md:rounded-b-3xl">
+                    ${!isBlitz ? `<button onclick="actions.useHint()" class="text-[#7A7570] hover:text-[#2D2A26] font-medium text-xs md:text-sm px-4 py-2.5 w-full sm:w-auto text-center border border-[#E8E4DF] sm:border-transparent rounded-xl sm:rounded-none bg-white sm:bg-transparent shadow-sm sm:shadow-none">Нужна подсказка</button>` : '<div class="hidden sm:block"></div>'}
+                    <button id="check-btn" onclick="actions.finishTraining(${isBlitz})" ${(!isBlitz && state.userDraft.trim().length < 10) ? 'disabled' : ''} class="w-full sm:w-auto ${isBlitz ? 'bg-[#2D2A26] hover:bg-black' : 'bg-[#4A90D9] hover:bg-[#3A7BC0] disabled:bg-gray-300 disabled:cursor-not-allowed'} text-white font-bold py-3 md:py-2.5 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> ${isBlitz ? 'Завершить досрочно' : 'Проверить план'}
                     </button>
                   </div>
@@ -1039,30 +1004,30 @@
               <div class="flex items-start gap-2 md:gap-3 ${item.type === 'subpoint' ? 'pl-6 md:pl-8' : ''}">
                 <span class="text-[#4A90D9] font-bold mt-2 select-none shrink-0">${item.type === 'point' ? '•' : '◦'}</span>
                 ${item.hidden 
-                  ? `<input type="text" oninput="actions.updateBlank(${idx}, event.target.value)" value="${item.userInput}" placeholder="..." class="flex-grow bg-[#FAF7F2] border-b-2 border-dashed border-[#F5A623] text-[#2D2A26] px-2 py-1 md:px-3 md:py-2 focus:outline-none focus:bg-[#FFF0E5] focus:border-solid transition-colors font-medium text-base md:text-lg w-full">` 
-                  : `<div class="px-2 py-1 md:px-3 md:py-2 text-[#2D2A26] font-medium text-base md:text-lg bg-gray-50 rounded-lg flex-grow border border-transparent shadow-sm">${item.text}</div>`
+                  ? `<input type="text" oninput="actions.updateBlank(${idx}, event.target.value)" value="${item.userInput}" placeholder="..." class="flex-grow bg-[#FAF7F2] border-b-2 border-dashed border-[#F5A623] text-[#2D2A26] px-2 py-1.5 md:px-3 md:py-2 focus:outline-none focus:bg-[#FFF0E5] focus:border-solid transition-colors font-medium text-[15px] md:text-lg w-full">` 
+                  : `<div class="px-2 py-1.5 md:px-3 md:py-2 text-[#2D2A26] font-medium text-[15px] md:text-lg bg-gray-50 rounded-lg flex-grow border border-transparent shadow-sm">${item.text}</div>`
                 }
               </div>
             `).join('');
 
             return `
-              <div class="h-full flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
-                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 font-medium transition-colors text-sm md:text-base self-start">
+              <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
+                <button onclick="actions.setView('catalog')" class="shrink-0 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-4 font-medium transition-colors text-sm md:text-base self-start bg-white border border-[#E8E4DF] px-4 py-2 rounded-lg shadow-sm">
                   <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
                 </button>
-                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col flex-grow min-h-0">
-                  <div class="shrink-0 p-4 md:p-6 border-b border-[#E8E4DF] bg-gray-50/50">
-                    <span class="text-[11px] md:text-sm font-bold uppercase tracking-wider text-[#F5A623] mb-1 md:mb-2 flex items-center gap-1"><i class="ph-fill ph-puzzle-piece text-lg"></i> Заполни пробелы</span>
-                    <h2 class="text-xl md:text-2xl font-bold leading-tight">${plan.topic}</h2>
+                <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col flex-grow">
+                  <div class="shrink-0 p-4 md:p-5 border-b border-[#E8E4DF] bg-gray-50/50 rounded-t-2xl md:rounded-t-3xl">
+                    <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-[#F5A623] mb-1 flex items-center gap-1"><i class="ph-fill ph-puzzle-piece text-base"></i> Заполни пробелы</span>
+                    <h2 class="text-lg md:text-2xl font-bold leading-tight">${plan.topic}</h2>
                   </div>
-                  <div class="flex-grow p-4 md:p-6 overflow-y-auto custom-scroll">
+                  <div class="p-4 md:p-6">
                     <div class="mb-4 md:mb-6 text-xs md:text-sm text-[#7A7570] bg-[#FAF7F2] p-3 md:p-4 rounded-xl border border-[#E8E4DF]">
                        Впишите термины по смыслу. Оценки выставляются лояльно (синонимы работают).
                     </div>
                     <div class="space-y-3 md:space-y-4 max-w-4xl mx-auto">${blanksHTML}</div>
                   </div>
-                  <div class="shrink-0 p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-end">
-                    <button onclick="actions.finishBlanks()" class="w-full sm:w-auto bg-[#F5A623] hover:bg-[#E09612] text-white font-bold py-2.5 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
+                  <div class="shrink-0 p-4 md:p-5 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-end rounded-b-2xl md:rounded-b-3xl">
+                    <button onclick="actions.finishBlanks()" class="w-full sm:w-auto bg-[#F5A623] hover:bg-[#E09612] text-white font-bold py-3 md:py-2.5 px-8 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm md:text-base">
                       <i class="ph-fill ph-check-circle text-lg md:text-xl"></i> Проверить
                     </button>
                   </div>
@@ -1093,7 +1058,7 @@
             const avgScore = progressValues.length > 0 ? Math.round(progressValues.reduce((acc, p) => acc + p.bestScore, 0) / progressValues.length) : 0;
 
             return `
-              <div class="h-full overflow-y-auto custom-scroll w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-6">
+              <div class="flex-grow flex flex-col w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
                 <h2 class="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Подробная статистика</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
                    <div class="bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col justify-center items-center text-center">
@@ -1135,57 +1100,62 @@
             `).join('');
 
             return `
-              <div id="comparison-report" class="h-full flex flex-col w-full max-w-[1400px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-2">
-                 <div class="flex flex-col md:flex-row justify-between items-center mb-6 print-hidden gap-4 shrink-0">
-                  <button onclick="actions.setView('catalog')" class="w-full md:w-auto flex items-center justify-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors border border-[#E8E4DF] md:border-transparent py-2 md:py-0 rounded-lg md:rounded-none bg-white md:bg-transparent text-sm md:text-base">
-                    <i class="ph ph-arrow-left text-lg"></i> Вернуться
+              <div id="comparison-report" class="flex-grow flex flex-col w-full max-w-[1400px] mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-8">
+                 <div class="flex flex-col sm:flex-row justify-between items-center mb-6 print-hidden gap-3 shrink-0">
+                  <button onclick="actions.setView('catalog')" class="w-full sm:w-auto flex items-center justify-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors bg-white border border-[#E8E4DF] px-4 py-2.5 md:py-2 rounded-xl md:rounded-lg text-sm md:text-base shadow-sm">
+                    <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
                   </button>
-                  <div class="flex w-full md:w-auto gap-2">
+                  <div class="flex w-full sm:w-auto gap-2">
                     ${res.isBlitz 
-                      ? `<button onclick="actions.startBlitz()" class="flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 bg-[#8E54E9] hover:bg-[#7a42d4] text-white font-bold px-3 md:px-4 py-2.5 md:py-2 rounded-lg transition-colors shadow-sm animate-pulse text-sm md:text-base"><i class="ph-fill ph-lightning text-lg"></i> След. Блиц</button>` 
+                      ? `<button onclick="actions.startBlitz()" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-[#8E54E9] hover:bg-[#7a42d4] text-white font-bold px-3 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-colors shadow-sm animate-pulse text-sm md:text-base"><i class="ph-fill ph-lightning text-lg"></i> След. Блиц</button>` 
                       : ''}
-                    <button id="screenshot-btn" onclick="actions.copyScreenshot()" class="flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-3 md:px-4 py-2.5 md:py-2 rounded-lg transition-all text-sm md:text-base"><i class="ph ph-camera text-lg"></i> Сохранить отчёт</button>
+                    <button id="screenshot-btn" onclick="actions.copyScreenshot()" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-3 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base border border-transparent"><i class="ph ph-camera text-lg"></i> Сохранить отчёт</button>
                   </div>
                 </div>
 
-                <div id="screenshot-target" class="flex-grow flex flex-col min-h-0 bg-[#FAF7F2]">
-                  <!-- Компактная карточка результата для экономии места -->
-                  <div class="bg-white rounded-2xl border border-[#E8E4DF] p-4 mb-4 flex items-center justify-between shadow-sm shrink-0 relative">
+                <div id="screenshot-target" class="flex flex-col gap-4 bg-[#FAF7F2] p-2 -mx-2 md:p-0 md:mx-0 rounded-2xl">
+                  
+                  <!-- Карточка результата -->
+                  <div class="bg-white rounded-2xl md:rounded-3xl border border-[#E8E4DF] p-5 md:p-6 flex flex-row items-center justify-between shadow-sm relative">
                     <div class="absolute -top-3 right-4 bg-blue-50 text-[#4A90D9] text-[10px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 animate-bounce print-hidden shadow-sm border border-blue-100" data-html2canvas-ignore>
                        <i class="ph-fill ph-cursor-click"></i> Алгоритм ошибся? Кликайте на значки!
                     </div>
-                    <div>
-                      <h2 class="text-xs md:text-sm font-bold text-[#7A7570] mb-0.5">Результат проверки:</h2>
+                    <div class="pr-4">
+                      <h2 class="text-[11px] md:text-xs font-bold text-[#7A7570] uppercase tracking-wider mb-1">Результат:</h2>
                       <p class="text-sm md:text-lg font-bold text-[#2D2A26] leading-tight">«${plan.topic}»</p>
                     </div>
                     <div class="flex items-baseline gap-1 text-right">
-                      <span class="text-3xl md:text-4xl font-black ${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
-                      <span class="text-lg md:text-xl text-[#7A7570] font-bold">/100</span>
+                      <span class="text-3xl md:text-5xl font-black ${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
+                      <span class="text-lg md:text-2xl text-[#7A7570] font-bold">/100</span>
                     </div>
                   </div>
 
-                  <!-- Разделенный экран: Ваш ответ / Эталон -->
-                  <div class="flex-grow flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+                  <!-- РАЗДЕЛЕННЫЙ ЭКРАН - ОТВЕТ СЛЕВА, ЭТАЛОН СПРАВА -->
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                     
-                    <div class="flex-1 bg-white border border-[#E8E4DF] rounded-2xl flex flex-col min-h-0 overflow-hidden shadow-sm">
-                      <div class="p-3 md:p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center shrink-0">
+                    <div class="bg-white border border-[#E8E4DF] rounded-2xl md:rounded-3xl flex flex-col shadow-sm">
+                      <div class="p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center rounded-t-2xl md:rounded-t-3xl">
                         <h3 class="font-bold text-sm md:text-base text-[#7A7570]">Ваш ответ</h3>
                       </div>
-                      <div class="p-4 overflow-y-auto custom-scroll flex-grow font-mono text-[13px] md:text-[14px] leading-relaxed whitespace-pre-wrap text-[#2D2A26] break-words">
+                      <div class="p-4 md:p-5 font-mono text-[13px] md:text-[14px] leading-relaxed whitespace-pre-wrap text-[#2D2A26] break-words">
                         ${state.userDraft || "Пустой ответ"}
                       </div>
                     </div>
                     
-                    <div class="flex-1 bg-white border border-[#E8E4DF] rounded-2xl flex flex-col min-h-0 overflow-hidden shadow-sm">
-                      <div class="p-3 md:p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center shrink-0">
+                    <div class="bg-white border border-[#E8E4DF] rounded-2xl md:rounded-3xl flex flex-col shadow-sm">
+                      <div class="p-4 border-b border-[#E8E4DF] bg-gray-50/50 flex items-center rounded-t-2xl md:rounded-t-3xl">
                         <h3 class="font-bold text-sm md:text-base text-[#5CB85C]">Эталонный план ФИПИ</h3>
                       </div>
-                      <div class="p-4 overflow-y-auto custom-scroll flex-grow space-y-4 md:space-y-6">
+                      <div class="p-4 md:p-5 space-y-4 md:space-y-5">
                         ${referenceHTML}
                       </div>
                     </div>
 
                   </div>
+                </div>
+                
+                <div class="mt-6 md:mt-8 flex justify-center print-hidden">
+                   <button onclick="actions.setView('catalog')" class="w-full sm:w-auto bg-[#2D2A26] hover:bg-black text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-md text-sm md:text-base">Вернуться в каталог</button>
                 </div>
               </div>
             `;
@@ -1197,20 +1167,20 @@
           if (!state.modeSelectorId) return '';
           return `
             <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-              <div class="bg-white rounded-2xl md:rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-[#E8E4DF]">
-                <div class="p-4 md:p-6 border-b border-[#E8E4DF] flex justify-between items-center bg-gray-50/50">
+              <div class="bg-white rounded-2xl md:rounded-3xl shadow-2xl max-w-2xl w-full border border-[#E8E4DF] flex flex-col max-h-[90vh]">
+                <div class="p-4 md:p-6 border-b border-[#E8E4DF] flex justify-between items-center bg-gray-50/50 shrink-0 rounded-t-2xl md:rounded-t-3xl">
                   <h3 class="text-lg md:text-xl font-bold">Выберите режим</h3>
                   <button onclick="actions.closeModal()" class="text-[#7A7570] hover:text-[#E74C3C] transition-colors p-1"><i class="ph ph-x text-xl md:text-2xl"></i></button>
                 </div>
-                <div class="p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-h-[80vh] overflow-y-auto custom-scroll">
+                <div class="p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 overflow-y-auto">
                   
                   <button onclick="actions.startTraining(${state.modeSelectorId}, 'study')" class="sm:col-span-2 text-left p-4 md:p-6 rounded-xl md:rounded-2xl border-2 border-[#E8E4DF] hover:border-[#5CB85C] hover:bg-[#5CB85C]/5 transition-all group flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
                     <div class="bg-[#5CB85C]/10 text-[#5CB85C] w-10 h-10 md:w-14 md:h-14 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
                       <i class="ph-fill ph-student text-xl md:text-3xl"></i>
                     </div>
                     <div>
-                      <h4 class="font-bold text-base md:text-lg mb-1">Изучить план перед тренировкой</h4>
-                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Прочитайте и запомните структуру идеального ответа, прежде чем проверять себя.</p>
+                      <h4 class="font-bold text-base md:text-lg mb-1">Изучить план</h4>
+                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Прочитайте структуру идеального ответа перед проверкой.</p>
                     </div>
                   </button>
 
@@ -1220,7 +1190,7 @@
                     </div>
                     <div>
                       <h4 class="font-bold text-base md:text-lg mb-1 md:mb-2">Заполнить пробелы</h4>
-                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Часть пунктов скрыта. Отличный вариант для начального этапа.</p>
+                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Отличный вариант для начального этапа.</p>
                     </div>
                   </button>
 
@@ -1230,7 +1200,7 @@
                     </div>
                     <div>
                       <h4 class="font-bold text-base md:text-lg mb-1 md:mb-2">Написать с нуля</h4>
-                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Классический Active Recall. Пустой лист, максимальная эффективность.</p>
+                      <p class="text-xs md:text-sm text-[#7A7570] leading-tight">Пустой лист, максимальная эффективность.</p>
                     </div>
                   </button>
 
@@ -1245,7 +1215,7 @@
           const app = document.getElementById('app');
           app.innerHTML = `
             ${getHeaderHTML()}
-            <main class="flex-grow flex flex-col min-h-0 overflow-hidden w-full" id="main-content">
+            <main class="flex-grow flex flex-col w-full" id="main-content">
                ${getViewHTML()}
             </main>
             ${getModalHTML()}
@@ -1254,7 +1224,6 @@
 
         // Инициализация при загрузке
         const initApp = () => {
-          // 1. Локальная проверка серии дней для мгновенного рендера
           const today = getTodayStr();
           if (state.streak.lastActive !== today && state.streak.lastActive !== null) {
             const yesterday = new Date();
@@ -1265,11 +1234,9 @@
             }
           }
           
-          // 2. МГНОВЕННЫЙ РЕНДЕР ИНТЕРФЕЙСА (Оффлайн/Локально)
           state.view = 'dashboard';
           render();
 
-          // 3. ФОНОВОЕ ПОДКЛЮЧЕНИЕ FIREBASE И СИНХРОНИЗАЦИЯ
           const initAuth = async () => {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
               await signInWithCustomToken(auth, __initial_auth_token).catch(console.warn);
@@ -1281,11 +1248,11 @@
               state.isAuthReady = true;
               if (user) {
                 currentUser = user;
-                await loadUserData(); // подтягивает данные и обновляет state (слияние)
-                render(); // перерисовываем с актуальными облачными данными
+                await loadUserData();
+                render();
               } else {
                 currentUser = null;
-                render(); // перерисовываем, чтобы показать кнопку "Войти"
+                render();
               }
             });
           }).catch(err => {
