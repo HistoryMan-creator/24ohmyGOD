@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕГЭ Plan Master</title>
   
-  <!-- Подключаем стили Tailwind CSS -->
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- Подключаем красивые иконки Phosphor Icons (аналог Lucide) -->
+  <!-- Иконки Phosphor Icons -->
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
   
   <!-- Шрифты -->
@@ -17,7 +17,7 @@
   <style>
     body { font-family: 'Nunito', sans-serif; }
     
-    /* Стили для печати (Скриншот для учителя) */
+    /* Стили для скриншота/печати (скрываем лишнее) */
     @media print {
       body { background: white; }
       header { display: none; }
@@ -28,15 +28,13 @@
 </head>
 <body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white pb-12">
 
-  <!-- Главный контейнер, куда JS будет отрисовывать интерфейс -->
   <div id="app"></div>
 
-  <!-- ВАЖНО: type="module" позволяет использовать import -->
   <script type="module">
-    // ИМПОРТ ВАШЕЙ БАЗЫ ДАННЫХ ИЗ ФАЙЛА
+    // 1. ИМПОРТ БАЗЫ ДАННЫХ
     import { PLANS as RAW_PLANS } from './ege_plans_db.js';
 
-    // --- 1. ПАРСЕР И АДАПТЕР БАЗЫ ДАННЫХ ---
+    // --- 2. ПАРСЕРЫ И АДАПТЕРЫ ---
     const parseReferencePlan = (text) => {
       const lines = text.split('\n').map(l => l.trim()).filter(l => l);
       const points = [];
@@ -69,7 +67,7 @@
       mandatoryPoints: p.mandatoryPoints
     }));
 
-    // --- 2. АЛГОРИТМЫ СРАВНЕНИЯ ---
+    // --- 3. АЛГОРИТМЫ СРАВНЕНИЯ ---
     const STOP_WORDS = new Set(["и", "в", "во", "не", "что", "он", "на", "я", "с", "со", "как", "а", "то", "все", "она", "так", "его", "но", "да", "ты", "к", "у", "же", "вы", "за", "бы", "по", "только", "ее", "мне", "было", "вот", "от", "меня", "еще", "нет", "о", "из", "ему", "теперь", "когда", "даже", "ну", "вдруг", "ли", "если", "уже", "или", "ни", "быть", "был", "него", "до", "вас", "нибудь", "опять", "уж", "вам", "ведь", "там", "потом", "себя", "ничего", "ей", "может", "они", "тут", "где", "есть", "надо", "ней", "для", "мы", "тебя", "их", "чем", "была", "сам", "чтоб", "без", "будто", "чего", "раз", "тоже", "себе", "под", "будет", "ж", "тогда", "кто", "этот", "того", "потому", "этого", "какой", "совсем", "ним", "здесь", "этом", "один", "почти", "мой", "тем", "чтобы", "нее", "сейчас", "были", "куда", "зачем", "всех", "никогда", "можно", "при", "наконец", "два", "об", "другой", "хоть", "после", "над", "больше", "тот", "через", "эти", "нас", "про", "всего", "них", "какая", "много", "разве", "три", "эту", "моя", "впрочем", "хорошо", "свою", "этой", "перед", "иногда", "лучше", "чуть", "том", "нельзя", "такой", "им", "более", "всегда", "конечно", "всю", "между"]);
 
     const normalizeText = (text) => {
@@ -166,6 +164,7 @@
     };
 
     const getTodayStr = () => new Date().toISOString().split('T')[0];
+    
     const calculateNextReview = (attempts, score, lastDate) => {
       const baseDate = new Date(lastDate);
       let addDays = 0;
@@ -184,7 +183,7 @@
       return baseDate.toISOString().split('T')[0];
     };
 
-    // --- 3. ГЛОБАЛЬНОЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ ---
+    // --- 4. ГЛОБАЛЬНОЕ СОСТОЯНИЕ (STATE) ---
     const state = {
       view: 'dashboard',
       searchQuery: '',
@@ -199,8 +198,7 @@
       streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}')
     };
 
-    // --- 4. ДЕЙСТВИЯ (ACTIONS) ---
-    // Делаем методы глобальными, чтобы вызывать их из HTML onClick
+    // --- 5. ДЕЙСТВИЯ (ACTIONS) ---
     window.actions = {
       setView: (v) => { state.view = v; render(); },
       
@@ -222,7 +220,11 @@
       useHint: () => {
         const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
         state.userDraft = "1. " + plan.plan.points[0].text + "\n";
-        render();
+        const ta = document.getElementById('draft-area');
+        if(ta) {
+            ta.value = state.userDraft;
+            actions.updateDraft(state.userDraft);
+        }
       },
 
       startTraining: (id, mode = 'classic') => {
@@ -407,29 +409,29 @@
       }
     };
 
-    // --- 5. ГЕНЕРАЦИЯ HTML ИНТЕРФЕЙСА ---
+    // --- 6. ГЕНЕРАЦИЯ HTML ИНТЕРФЕЙСА ---
 
     function getHeaderHTML() {
       return `
-        <header class="bg-white border-b border-[#E8E4DF] sticky top-0 z-10 print-hidden">
+        <header class="bg-white border-b border-[#E8E4DF] sticky top-0 z-10 print-hidden shadow-sm">
           <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
             <div class="flex items-center gap-6">
               <div class="flex items-center gap-2 cursor-pointer" onclick="actions.setView('dashboard')">
                 <div class="bg-[#4A90D9] p-1.5 rounded-lg text-white">
                   <i class="ph ph-book-open text-xl"></i>
                 </div>
-                <h1 class="font-bold text-xl tracking-tight hidden sm:block">ЕГЭ Plan Master</h1>
+                <h1 class="font-bold text-xl tracking-tight hidden sm:block">Plan Master</h1>
               </div>
               
               <nav class="flex items-center gap-1 bg-[#FAF7F2] p-1 rounded-xl border border-[#E8E4DF]">
                 <button onclick="actions.setView('dashboard')" class="px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'dashboard' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
-                  <i class="ph ph-house text-lg"></i> Дашборд
+                  <i class="ph-fill ph-house text-lg"></i> Дашборд
                 </button>
                 <button onclick="actions.setView('catalog')" class="px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'catalog' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
-                  <i class="ph ph-book-open text-lg"></i> Каталог
+                  <i class="ph-fill ph-books text-lg"></i> Каталог
                 </button>
                 <button onclick="actions.setView('statistics')" class="px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'statistics' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
-                  <i class="ph ph-chart-pie-slice text-lg"></i> Статистика
+                  <i class="ph-fill ph-chart-pie-slice text-lg"></i> Статистика
                 </button>
               </nav>
             </div>
@@ -437,7 +439,6 @@
               <div class="flex items-center gap-1.5 bg-[#FFF0E5] text-[#F5A623] px-3 py-1.5 rounded-lg font-bold" title="Серия дней">
                 <i class="ph-fill ph-fire text-lg ${state.streak.count > 0 ? 'text-[#F5A623]' : 'text-gray-300'}"></i> ${state.streak.count}
               </div>
-              <span class="hidden md:flex items-center gap-1 text-[#7A7570]"><i class="ph ph-medal text-lg"></i> Vanilla JS</span>
             </div>
           </div>
         </header>
@@ -463,12 +464,12 @@
         return `
           <div onclick="actions.openModal(${plan.id})" class="bg-white rounded-2xl border border-[#E8E4DF] p-5 hover:shadow-lg hover:border-[#4A90D9]/50 transition-all cursor-pointer group flex flex-col">
             <div class="flex justify-between items-start mb-3">
-              <span class="text-xs font-bold uppercase tracking-wider text-[#4A90D9] bg-[#4A90D9]/10 px-2 py-1 rounded-md">
-                ${plan.section ? plan.section.split('.')[0] : 'Без раздела'}
+              <span class="text-xs font-bold uppercase tracking-wider text-[#4A90D9] bg-[#4A90D9]/10 px-2 py-1 rounded-md truncate max-w-[60%]">
+                ${plan.section ? plan.section.split('.')[0] : 'Раздел'}
               </span>
-              <span class="text-xs font-bold px-2 py-1 rounded-md ${statusColor}">${statusText}</span>
+              <span class="text-xs font-bold px-2 py-1 rounded-md ${statusColor} shrink-0">${statusText}</span>
             </div>
-            <h3 class="font-bold text-lg mb-4 flex-grow group-hover:text-[#4A90D9] transition-colors">${plan.topic}</h3>
+            <h3 class="font-bold text-lg mb-4 flex-grow group-hover:text-[#4A90D9] transition-colors leading-tight">${plan.topic}</h3>
             <div class="flex items-center justify-between text-sm text-[#7A7570] border-t border-[#E8E4DF] pt-3">
               <span class="flex items-center gap-1"><i class="ph ph-clock"></i> ${p ? `${p.attempts} попыт. (max: ${p.bestScore})` : '0 попыток'}</span>
               <span class="flex items-center gap-1 text-[#4A90D9] font-medium opacity-0 group-hover:opacity-100 transition-opacity">Тренировать <i class="ph ph-caret-right"></i></span>
@@ -489,8 +490,8 @@
             <div class="flex justify-between items-start mb-3">
               <span class="text-xs font-bold uppercase tracking-wider text-[#4A90D9] bg-[#4A90D9]/10 px-2 py-1 rounded-md">Повторение</span>
             </div>
-            <h3 class="font-bold text-lg mb-4 flex-grow group-hover:text-[#4A90D9] transition-colors">${plan.topic}</h3>
-            <div class="text-sm font-bold text-[#E74C3C]">Пора повторить</div>
+            <h3 class="font-bold text-lg mb-4 flex-grow group-hover:text-[#4A90D9] transition-colors leading-tight">${plan.topic}</h3>
+            <div class="text-sm font-bold text-[#E74C3C] flex items-center gap-1"><i class="ph ph-warning-circle"></i> Пора повторить</div>
           </div>
         `).join('');
 
@@ -511,14 +512,14 @@
           </div>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div class="bg-white p-6 rounded-2xl border border-[#E8E4DF] shadow-sm flex items-center gap-4">
-              <div class="bg-[#4A90D9]/10 p-4 rounded-xl text-[#4A90D9]"><i class="ph ph-chart-bar text-3xl"></i></div>
+              <div class="bg-[#4A90D9]/10 p-4 rounded-xl text-[#4A90D9]"><i class="ph-fill ph-chart-bar text-3xl"></i></div>
               <div>
                 <div class="text-3xl font-black text-[#2D2A26]">${Object.keys(state.progress).length}</div>
                 <div class="text-sm font-bold text-[#7A7570] uppercase tracking-wider mt-1">Изучено планов</div>
               </div>
             </div>
             <div class="bg-white p-6 rounded-2xl border border-[#E8E4DF] shadow-sm flex items-center gap-4">
-              <div class="bg-[#5CB85C]/10 p-4 rounded-xl text-[#5CB85C]"><i class="ph ph-medal text-3xl"></i></div>
+              <div class="bg-[#5CB85C]/10 p-4 rounded-xl text-[#5CB85C]"><i class="ph-fill ph-medal text-3xl"></i></div>
               <div>
                 <div class="text-3xl font-black text-[#2D2A26]">${Object.values(state.progress).filter(p => p.status === 'mastered').length}</div>
                 <div class="text-sm font-bold text-[#7A7570] uppercase tracking-wider mt-1">Идеально (90+)</div>
@@ -532,7 +533,7 @@
               </div>
             </div>
           </div>
-          <h3 class="text-xl font-bold mb-4 flex items-center gap-2"><i class="ph ph-calendar-blank text-[#4A90D9] text-2xl"></i> План на сегодня</h3>
+          <h3 class="text-xl font-bold mb-4 flex items-center gap-2"><i class="ph-fill ph-calendar-blank text-[#4A90D9] text-2xl"></i> План на сегодня</h3>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">${reviewCards}</div>
           <div class="mt-8 bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-lg">
             <div class="mb-6 md:mb-0">
@@ -553,7 +554,7 @@
               <h2 class="text-3xl font-bold mb-2">Каталог планов</h2>
               <p class="text-[#7A7570]">Задание 24. Выберите тему для тренировки.</p>
             </div>
-            <div class="relative w-64">
+            <div class="relative w-64 md:w-80">
               <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7570] text-lg"></i>
               <input type="text" value="${state.searchQuery}" onkeyup="actions.setSearch(event.target.value)" placeholder="Поиск (по темам и синонимам)..." class="w-full pl-10 pr-4 py-2 rounded-xl border border-[#E8E4DF] bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9] transition-all">
             </div>
@@ -578,7 +579,7 @@
             <div class="bg-white rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col min-h-[500px]">
               <div class="p-6 md:p-8 border-b border-[#E8E4DF] ${isBlitz ? 'bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] text-white' : 'bg-gray-50/50'}">
                 <span class="text-sm font-bold uppercase tracking-wider ${isBlitz ? 'opacity-80' : 'text-[#4A90D9]'} mb-2 block">${plan.section}</span>
-                <h2 class="text-2xl md:text-3xl font-bold">${plan.topic}</h2>
+                <h2 class="text-2xl md:text-3xl font-bold leading-tight">${plan.topic}</h2>
               </div>
               <div class="flex-grow p-6 flex flex-col">
                 ${!isBlitz ? `
@@ -589,7 +590,7 @@
                     <li>Минимум 3 пункта, детализированных в подпунктах.</li>
                   </ul>
                 </div>` : ''}
-                <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите ключевые слова и пункты...' : '1. Понятие...'}" class="flex-grow w-full resize-none p-4 font-mono text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all" spellcheck="false" autofocus>${state.userDraft}</textarea>
+                <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите ключевые слова и пункты...' : '1. Понятие...'}" class="flex-grow w-full resize-none p-4 font-mono text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all outline-none" spellcheck="false" autofocus>${state.userDraft}</textarea>
               </div>
               <div class="p-6 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-between items-center">
                 ${!isBlitz ? `<button onclick="actions.useHint()" class="text-[#7A7570] hover:text-[#2D2A26] font-medium text-sm px-4 py-2">Нужна подсказка (1 пункт)</button>` : '<div></div>'}
@@ -621,8 +622,8 @@
             </button>
             <div class="bg-white rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col min-h-[600px]">
               <div class="p-6 md:p-8 border-b border-[#E8E4DF] bg-gray-50/50">
-                <span class="text-sm font-bold uppercase tracking-wider text-[#F5A623] mb-2 flex items-center gap-1"><i class="ph ph-puzzle-piece text-lg"></i> Режим "Заполни пробелы"</span>
-                <h2 class="text-2xl md:text-3xl font-bold">${plan.topic}</h2>
+                <span class="text-sm font-bold uppercase tracking-wider text-[#F5A623] mb-2 flex items-center gap-1"><i class="ph-fill ph-puzzle-piece text-lg"></i> Режим "Заполни пробелы"</span>
+                <h2 class="text-2xl md:text-3xl font-bold leading-tight">${plan.topic}</h2>
               </div>
               <div class="flex-grow p-6 md:p-8 space-y-4">
                 <div class="mb-6 text-sm text-[#7A7570] bg-[#FAF7F2] p-4 rounded-xl border border-[#E8E4DF]">
@@ -666,7 +667,7 @@
             <h2 class="text-3xl font-bold mb-6">Подробная статистика</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                <div class="bg-white p-8 rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col justify-center items-center text-center">
-                  <div class="text-[#F5A623] mb-4"><i class="ph ph-medal text-5xl"></i></div>
+                  <div class="text-[#F5A623] mb-4"><i class="ph-fill ph-medal text-6xl"></i></div>
                   <h3 class="font-bold text-xl text-[#7A7570] mb-2">Общий средний балл</h3>
                   <div class="text-6xl font-black text-[#2D2A26]">${avgScore}</div>
                </div>
@@ -693,7 +694,7 @@
               <ul class="mt-2 space-y-1">
                 ${pm.subpoints.map((sm, subIdx) => `
                   <li class="flex items-start gap-2 pl-6 p-1 -ml-1 rounded-lg select-none ${res.ignoreSubpoints ? '' : 'cursor-pointer hover:bg-gray-100 transition-colors group'}" ${!res.ignoreSubpoints ? `onclick="actions.toggleMatch(${idx}, ${subIdx})"` : ''}>
-                    ${res.ignoreSubpoints ? '<span class="text-[#7A7570] font-bold opacity-50">•</span>' : (sm.matched ? '<span class="text-[#5CB85C] font-bold group-hover:scale-125 transition-transform inline-block">✓</span>' : '<span class="text-[#E74C3C] font-bold opacity-50 group-hover:scale-125 transition-transform inline-block">✗</span>')}
+                    ${res.ignoreSubpoints ? '<span class="text-[#7A7570] font-bold opacity-50 text-lg">•</span>' : (sm.matched ? '<span class="text-[#5CB85C] font-bold group-hover:scale-125 transition-transform inline-block">✓</span>' : '<span class="text-[#E74C3C] font-bold opacity-50 group-hover:scale-125 transition-transform inline-block">✗</span>')}
                     <span class="text-sm ${!res.ignoreSubpoints && sm.matched ? 'text-[#2D2A26]' : 'text-[#7A7570] opacity-80'}">${String.fromCharCode(1072 + subIdx)}) ${sm.text}</span>
                   </li>
                 `).join('')}
@@ -716,14 +717,14 @@
 
             <div class="bg-white rounded-3xl border border-[#E8E4DF] p-8 mb-8 text-center shadow-sm relative">
               <div class="absolute top-4 right-4 bg-blue-50 text-[#4A90D9] text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 animate-bounce print-hidden">
-                 <i class="ph ph-cursor-click text-lg"></i> Алгоритм ошибся? Кликайте на значки ✓ и ✗ ниже!
+                 <i class="ph-fill ph-cursor-click text-lg"></i> Алгоритм ошибся? Кликайте на значки ✓ и ✗ ниже!
               </div>
               <h2 class="text-xl font-bold text-[#7A7570] mb-2">Ваш результат</h2>
               <div class="text-6xl font-black text-[#2D2A26] mb-4 flex justify-center items-baseline gap-1">
                 <span class="${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
                 <span class="text-3xl text-[#7A7570]">/100</span>
               </div>
-              <p class="text-lg font-medium text-[#2D2A26]">Тема: «${plan.topic}»</p>
+              <p class="text-lg font-medium text-[#2D2A26] leading-tight mb-2">Тема: «${plan.topic}»</p>
               <p class="text-sm text-[#7A7570] mt-2 max-w-xl mx-auto print-hidden">Система использует нечёткое сравнение (алгоритм прощает синонимы и опечатки). Проверьте эталонный план ниже, чтобы закрепить материал.</p>
             </div>
 
@@ -731,7 +732,7 @@
               <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-[#E8E4DF]">
                 <div class="p-6 md:p-8 bg-gray-50/30">
                   <h3 class="font-bold text-lg mb-6 flex items-center gap-2 text-[#7A7570]">Ваш ответ</h3>
-                  <div class="font-mono text-[14px] leading-loose whitespace-pre-wrap text-[#2D2A26]">${state.userDraft || "Пустой ответ"}</div>
+                  <div class="font-mono text-[14px] leading-loose whitespace-pre-wrap text-[#2D2A26] break-words">${state.userDraft || "Пустой ответ"}</div>
                 </div>
                 <div class="p-6 md:p-8">
                   <h3 class="font-bold text-lg mb-6 flex items-center gap-2 text-[#5CB85C]">Эталонный план</h3>
@@ -761,7 +762,7 @@
             <div class="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-4">
               <button onclick="actions.startTraining(${state.modeSelectorId}, 'classic')" class="text-left p-6 rounded-2xl border-2 border-[#E8E4DF] hover:border-[#4A90D9] hover:bg-[#4A90D9]/5 transition-all group">
                 <div class="bg-[#4A90D9]/10 text-[#4A90D9] w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <i class="ph ph-pen-nib text-3xl"></i>
+                  <i class="ph-fill ph-pen-nib text-2xl"></i>
                 </div>
                 <h4 class="font-bold text-lg mb-2">Написать с нуля</h4>
                 <p class="text-sm text-[#7A7570]">Классический Active Recall. Пустой лист, максимальная эффективность для мозга.</p>
@@ -769,7 +770,7 @@
 
               <button onclick="actions.startTraining(${state.modeSelectorId}, 'blanks')" class="text-left p-6 rounded-2xl border-2 border-[#E8E4DF] hover:border-[#F5A623] hover:bg-[#F5A623]/5 transition-all group">
                 <div class="bg-[#F5A623]/10 text-[#F5A623] w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <i class="ph ph-puzzle-piece text-3xl"></i>
+                  <i class="ph-fill ph-puzzle-piece text-2xl"></i>
                 </div>
                 <h4 class="font-bold text-lg mb-2">Заполнить пробелы</h4>
                 <p class="text-sm text-[#7A7570]">Часть пунктов скрыта. Отличный вариант для начального этапа заучивания темы.</p>
@@ -780,7 +781,7 @@
       `;
     }
 
-    // --- 6. ОТРИСОВКА (RENDER) ---
+    // --- 7. ОТРИСОВКА (RENDER) ---
     function render() {
       const app = document.getElementById('app');
       app.innerHTML = `
@@ -790,15 +791,6 @@
         </main>
         ${getModalHTML()}
       `;
-      
-      // Восстанавливаем фокус для текстовых полей, чтобы не сбивался при рендере
-      if(state.view === 'training' || state.view === 'blitz') {
-        const ta = document.getElementById('draft-area');
-        if(ta) {
-            ta.focus();
-            ta.setSelectionRange(ta.value.length, ta.value.length);
-        }
-      }
     }
 
     // Инициализация при загрузке
