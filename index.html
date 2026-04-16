@@ -58,7 +58,7 @@
     <div class="flex-grow flex items-center justify-center">
       <div class="animate-pulse flex flex-col items-center">
         <i class="ph ph-spinner-gap animate-spin text-4xl text-[#4A90D9] mb-4"></i>
-        <p class="text-[#7A7570] font-bold">Подключение к Firebase...</p>
+        <p class="text-[#7A7570] font-bold">Загрузка приложения...</p>
       </div>
     </div>
   </div>
@@ -302,15 +302,31 @@
             const snap = await getDoc(docRef);
             if (snap.exists()) {
               const data = snap.data();
-              if (data.progress) {
-                state.progress = data.progress;
-                localStorage.setItem('ege_plan_progress', JSON.stringify(state.progress));
+              
+              // Умное объединение: Локальный кэш (state) + Данные из облака (data)
+              const cloudProgress = data.progress || {};
+              const localProgress = state.progress || {};
+              const mergedProgress = { ...cloudProgress };
+              
+              // Если локальный скор выше или записи в облаке нет — берем локальный
+              for (const key in localProgress) {
+                 if (!mergedProgress[key] || localProgress[key].bestScore >= mergedProgress[key].bestScore) {
+                    mergedProgress[key] = localProgress[key];
+                 }
               }
-              if (data.streak) {
-                state.streak = data.streak;
-                localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
-              }
+              state.progress = mergedProgress;
+              localStorage.setItem('ege_plan_progress', JSON.stringify(state.progress));
+
+              const cloudStreak = data.streak || { count: 0, lastActive: null };
+              const localStreak = state.streak || { count: 0, lastActive: null };
+              state.streak = localStreak.count > cloudStreak.count ? localStreak : cloudStreak;
+              localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
+
+              // Синхронизируем обратно, чтобы облако получило наши новые локальные данные
+              saveProgressToCloud();
+
             } else {
+              // Новый аккаунт: выгружаем в него весь накопленный без регистрации локальный прогресс
               saveProgressToCloud();
             }
           } catch(e) {
@@ -391,6 +407,7 @@
               } else {
                 await createUserWithEmailAndPassword(auth, email, password);
               }
+              // После успешного входа onAuthStateChanged сработает автоматически
             } catch(e) {
               console.error(e);
               let msg = "Произошла ошибка.";
@@ -674,7 +691,10 @@
         // --- 8. ГЕНЕРАЦИЯ HTML ИНТЕРФЕЙСА ---
 
         function getHeaderHTML() {
-          if (state.view === 'loading' || state.view === 'auth') return '';
+          if (state.view === 'loading') return '';
+
+          // Если мы на экране авторизации, прячем кнопки меню, оставляем только логотип и Возврат
+          if (state.view === 'auth') return '';
 
           return `
             <header class="bg-white border-b border-[#E8E4DF] shrink-0 print-hidden shadow-sm">
@@ -703,9 +723,17 @@
                   <div class="flex items-center gap-1 bg-[#FFF0E5] text-[#F5A623] px-2 md:px-3 py-1.5 rounded-lg font-bold" title="Серия дней">
                     <i class="ph-fill ph-fire text-lg ${state.streak.count > 0 ? 'text-[#F5A623]' : 'text-gray-300'}"></i> ${state.streak.count}
                   </div>
-                  <button onclick="actions.logout()" class="text-[#7A7570] hover:text-[#E74C3C] bg-gray-50 hover:bg-red-50 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors" title="Выйти">
-                    <i class="ph ph-sign-out text-lg"></i>
-                  </button>
+                  
+                  ${currentUser ? `
+                    <button onclick="actions.logout()" class="text-[#7A7570] hover:text-[#E74C3C] bg-gray-50 hover:bg-red-50 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1" title="Выйти">
+                      <i class="ph ph-sign-out text-lg"></i>
+                    </button>
+                  ` : `
+                    <button onclick="actions.setView('auth')" class="text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1.5" title="Войти или зарегистрироваться">
+                      <i class="ph-bold ph-user text-lg"></i> <span class="hidden sm:inline">Войти</span>
+                    </button>
+                  `}
+                  
                 </div>
               </div>
             </header>
@@ -767,7 +795,7 @@
               <div class="flex-grow flex items-center justify-center min-h-[60vh]">
                 <div class="animate-pulse flex flex-col items-center">
                   <i class="ph ph-spinner-gap animate-spin text-4xl text-[#4A90D9] mb-4"></i>
-                  <p class="text-[#7A7570] font-bold">Проверка авторизации...</p>
+                  <p class="text-[#7A7570] font-bold">Подключение...</p>
                 </div>
               </div>
             `;
@@ -775,8 +803,11 @@
 
           if (state.view === 'auth') {
             return `
-              <div class="flex-grow flex items-center justify-center px-4 min-h-[70vh] w-full">
-                <div class="bg-white p-8 rounded-3xl border border-[#E8E4DF] shadow-sm max-w-md w-full">
+              <div class="flex-grow flex items-center justify-center px-4 min-h-[70vh] w-full relative">
+                <button onclick="actions.setView('dashboard')" class="absolute top-4 left-4 md:top-8 md:left-8 flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors text-sm md:text-base">
+                  <i class="ph ph-arrow-left text-lg"></i> На главную
+                </button>
+                <div class="bg-white p-8 rounded-3xl border border-[#E8E4DF] shadow-sm max-w-md w-full mt-10 md:mt-0">
                   <div class="flex items-center gap-2 justify-center mb-6 text-[#4A90D9]">
                     <div class="bg-[#4A90D9] p-2 rounded-xl text-white">
                       <i class="ph-fill ph-book-open text-3xl"></i>
@@ -805,6 +836,10 @@
                     <button onclick="actions.toggleAuthMode()" class="text-[#4A90D9] font-bold hover:underline ml-1">
                       ${state.authMode === 'login' ? 'Зарегистрироваться' : 'Войти'}
                     </button>
+                  </div>
+                  
+                  <div class="mt-6 text-xs text-center text-gray-400">
+                    <p>При регистрации или входе весь ваш текущий локальный прогресс будет автоматически синхронизирован с аккаунтом.</p>
                   </div>
                 </div>
               </div>
@@ -1249,7 +1284,9 @@
                 render();
               } else {
                 currentUser = null;
-                state.view = 'auth';
+                if (state.view === 'loading') {
+                  state.view = 'dashboard';
+                }
                 render();
               }
             });
