@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ЕГЭ Plan Master</title>
+  
+  <!-- Подключаем стили Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Подключаем красивые иконки Phosphor Icons (аналог Lucide) -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  
+  <!-- Шрифты -->
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Nunito', sans-serif; }
+    
+    /* Стили для печати (Скриншот для учителя) */
+    @media print {
+      body { background: white; }
+      header { display: none; }
+      .print-hidden { display: none !important; }
+      #comparison-report { margin: 0; padding: 0; box-shadow: none; border: none; }
+    }
+  </style>
+</head>
+<body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white pb-12">
+
+  <!-- Главный контейнер, куда JS будет отрисовывать интерфейс -->
+  <div id="app"></div>
+
+  <!-- ВАЖНО: type="module" позволяет использовать import -->
+  <script type="module">
+    // ИМПОРТ ВАШЕЙ БАЗЫ ДАННЫХ ИЗ ФАЙЛА
+    import { PLANS as RAW_PLANS } from './ege_plans_db.js';
+
+    // --- 1. ПАРСЕР И АДАПТЕР БАЗЫ ДАННЫХ ---
+    const parseReferencePlan = (text) => {
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+      const points = [];
+      let currentPoint = null;
+
+      lines.forEach(line => {
+        let cleanLine = line.replace(/^>\s*/, '').replace(/\\\*/g, '*').trim();
+        if (!cleanLine) return;
+
+        const pointMatch = cleanLine.match(/^(\d+)\.?\s+(.*)/);
+        const subpointMatch = cleanLine.match(/^([а-яa-zа-яё])\)\s+(.*)/i) || cleanLine.match(/^-\s+(.*)/);
+
+        if (pointMatch && !subpointMatch) {
+          currentPoint = { text: pointMatch[2].replace(/[:;.]+$/, '').trim(), subpoints: [] };
+          points.push(currentPoint);
+        } else if (subpointMatch && currentPoint) {
+          currentPoint.subpoints.push(subpointMatch[2].replace(/[;.]+$/, '').trim());
+        }
+      });
+      return { points };
+    };
+
+    const PLANS_DB = RAW_PLANS.map(p => ({
+      id: p.id,
+      topic: p.title,
+      aliases: p.aliases || [],
+      section: p.block,
+      difficulty: p.mandatoryPoints && p.mandatoryPoints.length >= 4 ? "hard" : p.mandatoryPoints && p.mandatoryPoints.length <= 2 ? "easy" : "medium",
+      plan: parseReferencePlan(p.referencePlan),
+      mandatoryPoints: p.mandatoryPoints
+    }));
+
+    // --- 2. АЛГОРИТМЫ СРАВНЕНИЯ ---
+    const STOP_WORDS = new Set(["и", "в", "во", "не", "что", "он", "на", "я", "с", "со", "как", "а", "то", "все", "она", "так", "его", "но", "да", "ты", "к", "у", "же", "вы", "за", "бы", "по", "только", "ее", "мне", "было", "вот", "от", "меня", "еще", "нет", "о", "из", "ему", "теперь", "когда", "даже", "ну", "вдруг", "ли", "если", "уже", "или", "ни", "быть", "был", "него", "до", "вас", "нибудь", "опять", "уж", "вам", "ведь", "там", "потом", "себя", "ничего", "ей", "может", "они", "тут", "где", "есть", "надо", "ней", "для", "мы", "тебя", "их", "чем", "была", "сам", "чтоб", "без", "будто", "чего", "раз", "тоже", "себе", "под", "будет", "ж", "тогда", "кто", "этот", "того", "потому", "этого", "какой", "совсем", "ним", "здесь", "этом", "один", "почти", "мой", "тем", "чтобы", "нее", "сейчас", "были", "куда", "зачем", "всех", "никогда", "можно", "при", "наконец", "два", "об", "другой", "хоть", "после", "над", "больше", "тот", "через", "эти", "нас", "про", "всего", "них", "какая", "много", "разве", "три", "эту", "моя", "впрочем", "хорошо", "свою", "этой", "перед", "иногда", "лучше", "чуть", "том", "нельзя", "такой", "им", "более", "всегда", "конечно", "всю", "между"]);
+
+    const normalizeText = (text) => {
+      if (!text) return [];
+      return text.toLowerCase().replace(/[.,:;!?()\[\]"']/g, ' ').split(/\s+/).filter(word => word.length > 2 && !STOP_WORDS.has(word));
+    };
+
+    const jaccardIndex = (words1, words2) => {
+      const set1 = new Set(words1);
+      const set2 = new Set(words2);
+      const intersection = new Set([...set1].filter(x => set2.has(x)));
+      const union = new Set([...set1, ...set2]);
+      if (union.size === 0) return 0;
+      return intersection.size / union.size;
+    };
+
+    const parseUserText = (text) => {
+      const lines = text.split('\n').filter(l => l.trim() !== '');
+      const parsed = [];
+      let currentPoint = null;
+
+      lines.forEach(line => {
+        if (line.startsWith(' ') || line.startsWith('\t') || line.trim().startsWith('-') || /^[а-яa-z]\)/.test(line.trim())) {
+          if (currentPoint) {
+            currentPoint.subpoints.push(line.trim().replace(/^-/, '').trim());
+          } else {
+            currentPoint = { text: "Без заголовка", subpoints: [line.trim()] };
+            parsed.push(currentPoint);
+          }
+        } else {
+          currentPoint = { text: line.trim(), subpoints: [] };
+          parsed.push(currentPoint);
+        }
+      });
+      return parsed;
+    };
+
+    const comparePlans = (userPlanText, referencePlan, ignoreSubpoints = false, isBlitz = false) => {
+      const userParsed = parseUserText(userPlanText);
+      const THRESHOLD = 0.35;
+      
+      let scorePoints = 0;
+      let scoreSubpoints = 0;
+      
+      const totalRefPoints = referencePlan.points.length;
+      let totalRefSubpoints = 0;
+      
+      const matchResults = referencePlan.points.map(refPoint => {
+        if (!ignoreSubpoints) totalRefSubpoints += refPoint.subpoints.length;
+        
+        const refWords = normalizeText(refPoint.text);
+        let bestMatch = null;
+        let bestScore = 0;
+        
+        userParsed.forEach(userPoint => {
+          const userWords = normalizeText(userPoint.text);
+          const score = jaccardIndex(refWords, userWords);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = userPoint;
+          }
+        });
+
+        const isPointMatched = bestScore >= THRESHOLD;
+        if (isPointMatched) scorePoints++;
+
+        const subpointMatches = refPoint.subpoints.map(refSub => {
+          const refSubWords = normalizeText(refSub);
+          let isSubMatched = false;
+          if (isPointMatched && bestMatch && !ignoreSubpoints) {
+            bestMatch.subpoints.forEach(userSub => {
+              if (jaccardIndex(refSubWords, normalizeText(userSub)) >= THRESHOLD) isSubMatched = true;
+            });
+          }
+          if (isSubMatched && !ignoreSubpoints) scoreSubpoints++;
+          return { text: refSub, matched: isSubMatched };
+        });
+
+        return {
+          text: refPoint.text,
+          matched: isPointMatched,
+          subpoints: subpointMatches,
+          userTextMatched: isPointMatched ? bestMatch?.text : null
+        };
+      });
+
+      const pointWeight = ignoreSubpoints ? 100 : 50;
+      const subpointWeight = ignoreSubpoints ? 0 : 50;
+      
+      const pointsScore = (scorePoints / totalRefPoints) * pointWeight;
+      const subpointsScore = totalRefSubpoints > 0 && !ignoreSubpoints ? (scoreSubpoints / totalRefSubpoints) * subpointWeight : subpointWeight;
+      
+      return { results: matchResults, score: Math.round(pointsScore + subpointsScore), ignoreSubpoints, isBlitz };
+    };
+
+    const getTodayStr = () => new Date().toISOString().split('T')[0];
+    const calculateNextReview = (attempts, score, lastDate) => {
+      const baseDate = new Date(lastDate);
+      let addDays = 0;
+      if (score >= 90) {
+        if (attempts === 1) addDays = 1;
+        else if (attempts === 2) addDays = 3;
+        else if (attempts === 3) addDays = 7;
+        else if (attempts === 4) addDays = 14;
+        else addDays = 30;
+      } else {
+        if (attempts <= 2) addDays = 1;
+        else if (attempts === 3) addDays = 3;
+        else addDays = 7;
+      }
+      baseDate.setDate(baseDate.getDate() + addDays);
+      return baseDate.toISOString().split('T')[0];
+    };
+
+    // --- 3. ГЛОБАЛЬНОЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ ---
+    const state = {
+      view: 'dashboard',
+      searchQuery: '',
+      selectedPlanId: null,
+      userDraft: '',
+      comparisonResult: null,
+      modeSelectorId: null,
+      blanksData: [],
+      timeLeft: 60,
+      timerRef: null,
+      progress: JSON.parse(localStorage.getItem('ege_plan_progress') || '{}'),
+      streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}')
+    };
+
+    // --- 4. ДЕЙСТВИЯ (ACTIONS) ---
+    // Делаем методы глобальными, чтобы вызывать их из HTML onClick
+    window.actions = {
+      setView: (v) => { state.view = v; render(); },
+      
+      setSearch: (v) => { 
+        state.searchQuery = v; 
+        document.getElementById('catalog-grid').innerHTML = generateCatalogGrid(); 
+      },
+
+      updateDraft: (val) => {
+        state.userDraft = val;
+        const btn = document.getElementById('check-btn');
+        if (btn) btn.disabled = val.trim().length < 10;
+      },
+
+      updateBlank: (idx, val) => {
+        state.blanksData[idx].userInput = val;
+      },
+
+      useHint: () => {
+        const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
+        state.userDraft = "1. " + plan.plan.points[0].text + "\n";
+        render();
+      },
+
+      startTraining: (id, mode = 'classic') => {
+        state.selectedPlanId = id;
+        state.modeSelectorId = null;
+        state.comparisonResult = null;
+
+        if (mode === 'classic') {
+          state.userDraft = '';
+          state.view = 'training';
+        } else if (mode === 'blanks') {
+          const planData = PLANS_DB.find(p => p.id === id);
+          const items = [];
+          planData.plan.points.forEach((p, pIdx) => {
+            items.push({ id: `p_${pIdx}`, type: 'point', text: p.text, hidden: Math.random() > 0.6, userInput: '' });
+            p.subpoints.forEach((sp, spIdx) => {
+              items.push({ id: `s_${pIdx}_${spIdx}`, type: 'subpoint', text: sp, hidden: Math.random() > 0.4, userInput: '' });
+            });
+          });
+          state.blanksData = items;
+          state.view = 'training_blanks';
+        }
+        render();
+      },
+
+      startBlitz: () => {
+        const randomPlan = PLANS_DB[Math.floor(Math.random() * PLANS_DB.length)];
+        state.selectedPlanId = randomPlan.id;
+        state.userDraft = '';
+        state.comparisonResult = null;
+        state.timeLeft = 60;
+        state.view = 'blitz';
+        render();
+
+        clearInterval(state.timerRef);
+        state.timerRef = setInterval(() => {
+          if (state.timeLeft > 0) {
+            state.timeLeft--;
+            const timerEl = document.getElementById('blitz-timer');
+            if (timerEl) {
+              timerEl.innerText = `00:${state.timeLeft.toString().padStart(2, '0')}`;
+              if (state.timeLeft <= 10) {
+                timerEl.classList.add('text-[#E74C3C]', 'border-[#E74C3C]', 'animate-pulse');
+                timerEl.classList.remove('text-[#4A90D9]', 'border-[#E8E4DF]');
+              }
+            }
+          } else {
+            clearInterval(state.timerRef);
+            window.actions.finishTraining(true);
+          }
+        }, 1000);
+      },
+
+      finishTraining: (isBlitz = false) => {
+        clearInterval(state.timerRef);
+        const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
+        const result = comparePlans(state.userDraft, plan.plan, isBlitz, isBlitz);
+        state.comparisonResult = result;
+        saveProgress(result.score);
+        state.view = 'comparison';
+        render();
+      },
+
+      finishBlanks: () => {
+        const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
+        let correctCount = 0;
+        let totalHidden = 0;
+        let draftLines = [];
+        
+        const newResults = plan.plan.points.map((p, pIdx) => {
+          const pointData = state.blanksData.find(item => item.id === `p_${pIdx}`);
+          let isPointMatched = true;
+
+          if (pointData && pointData.hidden) {
+            totalHidden++;
+            const score = jaccardIndex(normalizeText(pointData.text), normalizeText(pointData.userInput));
+            isPointMatched = score >= 0.35;
+            if (isPointMatched) correctCount++;
+            draftLines.push(`${pIdx + 1}. ${pointData.userInput || '[пропуск]'}`);
+          } else if (pointData) {
+            draftLines.push(`${pIdx + 1}. ${pointData.text}`);
+          }
+
+          const subpointMatches = p.subpoints.map((sp, spIdx) => {
+            const spData = state.blanksData.find(item => item.id === `s_${pIdx}_${spIdx}`);
+            let isSpMatched = true;
+            if (spData && spData.hidden) {
+              totalHidden++;
+              const score = jaccardIndex(normalizeText(spData.text), normalizeText(spData.userInput));
+              isSpMatched = score >= 0.35;
+              if (isSpMatched) correctCount++;
+              draftLines.push(`   - ${spData.userInput || '[пропуск]'}`);
+            } else if (spData) {
+              draftLines.push(`   - ${spData.text}`);
+            }
+            return { text: sp, matched: isSpMatched };
+          });
+
+          return { text: p.text, matched: isPointMatched, subpoints: subpointMatches };
+        });
+        
+        state.userDraft = draftLines.join('\n');
+        const finalScore = totalHidden > 0 ? Math.round((correctCount / totalHidden) * 100) : 100;
+        
+        state.comparisonResult = { score: finalScore, results: newResults, ignoreSubpoints: false, isBlitz: false };
+        saveProgress(finalScore);
+        state.view = 'comparison';
+        render();
+      },
+
+      toggleMatch: (pointIdx, subIdx = null) => {
+        if (state.comparisonResult.ignoreSubpoints && subIdx !== null) return;
+
+        const newResults = JSON.parse(JSON.stringify(state.comparisonResult.results));
+        
+        if (subIdx === null) {
+          newResults[pointIdx].matched = !newResults[pointIdx].matched;
+        } else {
+          newResults[pointIdx].subpoints[subIdx].matched = !newResults[pointIdx].subpoints[subIdx].matched;
+        }
+
+        let scorePoints = 0, scoreSubpoints = 0, totalRefSubpoints = 0;
+        const totalRefPoints = newResults.length;
+
+        newResults.forEach(r => {
+          if (r.matched) scorePoints++;
+          if (!state.comparisonResult.ignoreSubpoints) {
+             totalRefSubpoints += r.subpoints.length;
+             r.subpoints.forEach(s => { if (s.matched) scoreSubpoints++; });
+          }
+        });
+
+        const pointWeight = state.comparisonResult.ignoreSubpoints ? 100 : 50;
+        const subpointWeight = state.comparisonResult.ignoreSubpoints ? 0 : 50;
+        const pointsScore = (scorePoints / totalRefPoints) * pointWeight;
+        const subpointsScore = totalRefSubpoints > 0 && !state.comparisonResult.ignoreSubpoints ? (scoreSubpoints / totalRefSubpoints) * subpointWeight : subpointWeight;
+        const newTotalScore = Math.round(pointsScore + subpointsScore);
+
+        state.comparisonResult.results = newResults;
+        state.comparisonResult.score = newTotalScore;
+        saveProgress(newTotalScore);
+        render();
+      },
+
+      openModal: (id) => { state.modeSelectorId = id; render(); },
+      closeModal: () => { state.modeSelectorId = null; render(); },
+      printReport: () => window.print()
+    };
+
+    const saveProgress = (score) => {
+      const today = getTodayStr();
+      const prevData = state.progress[state.selectedPlanId] || { attempts: 0, bestScore: 0 };
+      const newAttempts = prevData.attempts + 1;
+      
+      state.progress[state.selectedPlanId] = {
+        attempts: newAttempts,
+        lastAttempt: today,
+        bestScore: Math.max(prevData.bestScore, score),
+        lastScore: score,
+        nextReview: calculateNextReview(newAttempts, score, today),
+        status: score >= 90 && newAttempts >= 3 ? 'mastered' : score >= 70 ? 'almost' : 'learning'
+      };
+      
+      localStorage.setItem('ege_plan_progress', JSON.stringify(state.progress));
+      updateStreak();
+    };
+
+    const updateStreak = () => {
+      const today = getTodayStr();
+      if (state.streak.lastActive !== today) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        
+        if (state.streak.lastActive === yesterdayStr) {
+          state.streak.count++;
+        } else {
+          state.streak.count = 1;
+        }
+        state.streak.lastActive = today;
+        localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
+      }
+    };
+
+    // --- 5. ГЕНЕРАЦИЯ HTML ИНТЕРФЕЙСА ---
+
+    function getHeaderHTML() {
+      return `
+        <header class="bg-white border-b border-[#E8E4DF] sticky top-0 z-10 print-hidden">
+          <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-6">
+              <div class="flex items-center gap-2 cursor-pointer" onclick="actions.setView('dashboard')">
+                <div class="bg-[#4A90D9] p-1.5 rounded-lg text-white">
+                  <i class="ph ph-book-open text-xl"></i>
+                </div>
+                <h1 class="font-bold text-xl tracking-tight hidden sm:block">ЕГЭ Plan Master</h1>
+              </div>
+              
+              <nav class="flex items-center gap-1 bg-[#FAF7F2] p-1 rounded-xl border border-[#E8E4DF]">
+                <button onclick="actions.setView('dashboard')" class="px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'dashboard' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
+                  <i class="ph ph-house text-lg"></i> Дашборд
+                </button>
+                <button onclick="actions.setView('catalog')" class="px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'catalog' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
+                  <i class="ph ph-book-open text-lg"></i> Каталог
+                </button>
+                <button onclick="actions.setView('statistics')" class="px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${state.view === 'statistics' ? 'bg-white shadow-sm text-[#4A90D9]' : 'text-[#7A7570] hover:text-[#2D2A26]'}">
+                  <i class="ph ph-chart-pie-slice text-lg"></i> Статистика
+                </button>
+              </nav>
+            </div>
+            <div class="flex items-center gap-4 text-sm font-medium">
+              <div class="flex items-center gap-1.5 bg-[#FFF0E5] text-[#F5A623] px-3 py-1.5 rounded-lg font-bold" title="Серия дней">
+                <i class="ph-fill ph-fire text-lg ${state.streak.count > 0 ? 'text-[#F5A623]' : 'text-gray-300'}"></i> ${state.streak.count}
+              </div>
+              <span class="hidden md:flex items-center gap-1 text-[#7A7570]"><i class="ph ph-medal text-lg"></i> Vanilla JS</span>
+            </div>
+          </div>
+        </header>
+      `;
+    }
+
+    function generateCatalogGrid() {
+      const query = state.searchQuery.toLowerCase();
+      const filtered = PLANS_DB.filter(plan => {
+        if (!query) return true;
+        return plan.topic.toLowerCase().includes(query) || plan.aliases.some(a => a.toLowerCase().includes(query));
+      });
+
+      return filtered.map(plan => {
+        const p = state.progress[plan.id];
+        let statusColor = 'bg-gray-200 text-[#7A7570]';
+        let statusText = 'Новый';
+        if (p) {
+          if (p.status === 'mastered') { statusColor = 'bg-[#D4A017] text-white'; statusText = 'Выучен ⭐'; }
+          else if (p.status === 'almost') { statusColor = 'bg-[#5CB85C] text-white'; statusText = 'Почти выучен'; }
+          else { statusColor = 'bg-[#F5A623] text-white'; statusText = 'В процессе'; }
+        }
+        return `
+          <div onclick="actions.openModal(${plan.id})" class="bg-white rounded-2xl border border-[#E8E4DF] p-5 hover:shadow-lg hover:border-[#4A90D9]/50 transition-all cursor-pointer group flex flex-col">
+            <div class="flex justify-between items-start mb-3">
+              <span class="text-xs font-bold uppercase tracking-wider text-[#4A90D9] bg-[#4A90D9]/10 px-2 py-1 rounded-md">
+                ${plan.section ? plan.section.split('.')[0] : 'Без раздела'}
+              </span>
+              <span class="text-xs font-bold px-2 py-1 rounded-md ${statusColor}">${statusText}</span>
+            </div>
+            <h3 class="font-bold text-lg mb-4 flex-grow group-hover:text-[#4A90D9] transition-colors">${plan.topic}</h3>
+            <div class="flex items-center justify-between text-sm text-[#7A7570] border-t border-[#E8E4DF] pt-3">
+              <span class="flex items-center gap-1"><i class="ph ph-clock"></i> ${p ? `${p.attempts} попыт. (max: ${p.bestScore})` : '0 попыток'}</span>
+              <span class="flex items-center gap-1 text-[#4A90D9] font-medium opacity-0 group-hover:opacity-100 transition-opacity">Тренировать <i class="ph ph-caret-right"></i></span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function getViewHTML() {
+      if (state.view === 'dashboard') {
+        const today = getTodayStr();
+        const reviews = PLANS_DB.filter(p => state.progress[p.id] && state.progress[p.id].nextReview <= today);
+        
+        let reviewCards = reviews.map(plan => `
+          <div onclick="actions.openModal(${plan.id})" class="bg-white rounded-2xl border border-[#E8E4DF] p-5 hover:shadow-lg hover:border-[#4A90D9]/50 transition-all cursor-pointer group flex flex-col relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-1 h-full bg-[#E74C3C]"></div>
+            <div class="flex justify-between items-start mb-3">
+              <span class="text-xs font-bold uppercase tracking-wider text-[#4A90D9] bg-[#4A90D9]/10 px-2 py-1 rounded-md">Повторение</span>
+            </div>
+            <h3 class="font-bold text-lg mb-4 flex-grow group-hover:text-[#4A90D9] transition-colors">${plan.topic}</h3>
+            <div class="text-sm font-bold text-[#E74C3C]">Пора повторить</div>
+          </div>
+        `).join('');
+
+        if (reviews.length === 0) {
+          reviewCards = `
+            <div class="col-span-full bg-white rounded-2xl border border-[#E8E4DF] p-8 text-center text-[#7A7570] shadow-sm">
+              <i class="ph-fill ph-check-circle text-5xl mx-auto mb-3 text-[#5CB85C] opacity-50 block"></i>
+              <p class="font-bold text-lg text-[#2D2A26]">На сегодня нет планов для повторения!</p>
+              <p class="mt-1 mb-4">Вы молодец. Можете взять новые темы из каталога.</p>
+              <button onclick="actions.setView('catalog')" class="bg-[#4A90D9]/10 text-[#4A90D9] font-bold px-4 py-2 rounded-lg hover:bg-[#4A90D9]/20 transition-colors">Перейти в каталог</button>
+            </div>`;
+        }
+
+        return `
+          <div class="mb-8">
+            <h2 class="text-3xl font-bold mb-2">С возвращением! 👋</h2>
+            <p class="text-[#7A7570]">Ваша статистика и планы на сегодня.</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-2xl border border-[#E8E4DF] shadow-sm flex items-center gap-4">
+              <div class="bg-[#4A90D9]/10 p-4 rounded-xl text-[#4A90D9]"><i class="ph ph-chart-bar text-3xl"></i></div>
+              <div>
+                <div class="text-3xl font-black text-[#2D2A26]">${Object.keys(state.progress).length}</div>
+                <div class="text-sm font-bold text-[#7A7570] uppercase tracking-wider mt-1">Изучено планов</div>
+              </div>
+            </div>
+            <div class="bg-white p-6 rounded-2xl border border-[#E8E4DF] shadow-sm flex items-center gap-4">
+              <div class="bg-[#5CB85C]/10 p-4 rounded-xl text-[#5CB85C]"><i class="ph ph-medal text-3xl"></i></div>
+              <div>
+                <div class="text-3xl font-black text-[#2D2A26]">${Object.values(state.progress).filter(p => p.status === 'mastered').length}</div>
+                <div class="text-sm font-bold text-[#7A7570] uppercase tracking-wider mt-1">Идеально (90+)</div>
+              </div>
+            </div>
+            <div class="bg-white p-6 rounded-2xl border border-[#E8E4DF] shadow-sm flex items-center gap-4 border-b-4 border-b-[#F5A623]">
+              <div class="bg-[#F5A623]/10 p-4 rounded-xl text-[#F5A623]"><i class="ph-fill ph-fire text-3xl"></i></div>
+              <div>
+                <div class="text-3xl font-black text-[#2D2A26]">${state.streak.count} дн.</div>
+                <div class="text-sm font-bold text-[#7A7570] uppercase tracking-wider mt-1">Ударный режим</div>
+              </div>
+            </div>
+          </div>
+          <h3 class="text-xl font-bold mb-4 flex items-center gap-2"><i class="ph ph-calendar-blank text-[#4A90D9] text-2xl"></i> План на сегодня</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">${reviewCards}</div>
+          <div class="mt-8 bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-lg">
+            <div class="mb-6 md:mb-0">
+              <h3 class="text-2xl font-bold mb-2 flex items-center gap-2"><i class="ph-fill ph-lightning text-[#F5A623] text-3xl"></i> Блиц-тест</h3>
+              <p class="opacity-90 max-w-md">60 секунд. Случайная тема. Отличная встряска для мозга и проверка скорости вспоминания перед экзаменом.</p>
+            </div>
+            <button onclick="actions.startBlitz()" class="bg-white text-[#4A90D9] px-8 py-3 rounded-xl font-bold text-lg hover:bg-gray-100 transition-colors shadow-sm flex items-center gap-2 shrink-0">
+              <i class="ph-fill ph-play text-xl"></i> Начать Блиц
+            </button>
+          </div>
+        `;
+      }
+
+      if (state.view === 'catalog') {
+        return `
+          <div class="flex justify-between items-end mb-6">
+            <div>
+              <h2 class="text-3xl font-bold mb-2">Каталог планов</h2>
+              <p class="text-[#7A7570]">Задание 24. Выберите тему для тренировки.</p>
+            </div>
+            <div class="relative w-64">
+              <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7570] text-lg"></i>
+              <input type="text" value="${state.searchQuery}" onkeyup="actions.setSearch(event.target.value)" placeholder="Поиск (по темам и синонимам)..." class="w-full pl-10 pr-4 py-2 rounded-xl border border-[#E8E4DF] bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9] transition-all">
+            </div>
+          </div>
+          <div id="catalog-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            ${generateCatalogGrid()}
+          </div>
+        `;
+      }
+
+      if (state.view === 'training' || state.view === 'blitz') {
+        const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
+        const isBlitz = state.view === 'blitz';
+        return `
+          <div class="max-w-3xl mx-auto">
+            <div class="flex justify-between items-center mb-6">
+              <button onclick="actions.setView('catalog')" class="flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors">
+                <i class="ph ph-arrow-left text-lg"></i> ${isBlitz ? 'Сдаться и выйти' : 'Вернуться в каталог'}
+              </button>
+              ${isBlitz ? `<div id="blitz-timer" class="text-4xl font-black bg-white px-6 py-2 rounded-2xl border-2 shadow-sm text-[#4A90D9] border-[#E8E4DF]">00:${state.timeLeft.toString().padStart(2, '0')}</div>` : ''}
+            </div>
+            <div class="bg-white rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+              <div class="p-6 md:p-8 border-b border-[#E8E4DF] ${isBlitz ? 'bg-gradient-to-r from-[#4A90D9] to-[#8E54E9] text-white' : 'bg-gray-50/50'}">
+                <span class="text-sm font-bold uppercase tracking-wider ${isBlitz ? 'opacity-80' : 'text-[#4A90D9]'} mb-2 block">${plan.section}</span>
+                <h2 class="text-2xl md:text-3xl font-bold">${plan.topic}</h2>
+              </div>
+              <div class="flex-grow p-6 flex flex-col">
+                ${!isBlitz ? `
+                <div class="mb-4 text-sm text-[#7A7570] bg-[#FAF7F2] p-4 rounded-xl border border-[#E8E4DF]">
+                  <p class="font-semibold mb-1 text-[#2D2A26]">Инструкция:</p>
+                  <ul class="list-disc pl-5 space-y-1">
+                    <li>Каждая новая строка — это новый пункт. Для подпункта добавьте пробел или тире в начале строки.</li>
+                    <li>Минимум 3 пункта, детализированных в подпунктах.</li>
+                  </ul>
+                </div>` : ''}
+                <textarea id="draft-area" oninput="actions.updateDraft(event.target.value)" placeholder="${isBlitz ? 'Быстро пишите ключевые слова и пункты...' : '1. Понятие...'}" class="flex-grow w-full resize-none p-4 font-mono text-[16px] leading-relaxed bg-[#FAF7F2] border border-[#E8E4DF] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8E54E9] focus:bg-white transition-all" spellcheck="false" autofocus>${state.userDraft}</textarea>
+              </div>
+              <div class="p-6 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-between items-center">
+                ${!isBlitz ? `<button onclick="actions.useHint()" class="text-[#7A7570] hover:text-[#2D2A26] font-medium text-sm px-4 py-2">Нужна подсказка (1 пункт)</button>` : '<div></div>'}
+                <button id="check-btn" onclick="actions.finishTraining(${isBlitz})" ${(!isBlitz && state.userDraft.trim().length < 10) ? 'disabled' : ''} class="${isBlitz ? 'bg-[#2D2A26] hover:bg-black' : 'bg-[#4A90D9] hover:bg-[#3A7BC0] disabled:bg-gray-300 disabled:cursor-not-allowed'} text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm flex items-center gap-2">
+                  <i class="ph-fill ph-check-circle text-xl"></i> ${isBlitz ? 'Завершить досрочно' : 'Проверить план'}
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (state.view === 'training_blanks') {
+        const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
+        const blanksHTML = state.blanksData.map((item, idx) => `
+          <div class="flex items-start gap-3 ${item.type === 'subpoint' ? 'pl-8' : ''}">
+            <span class="text-[#4A90D9] font-bold mt-2 select-none shrink-0">${item.type === 'point' ? '•' : '◦'}</span>
+            ${item.hidden 
+              ? `<input type="text" oninput="actions.updateBlank(${idx}, event.target.value)" value="${item.userInput}" placeholder="..." class="flex-grow bg-[#FAF7F2] border-b-2 border-dashed border-[#F5A623] text-[#2D2A26] px-3 py-2 focus:outline-none focus:bg-[#FFF0E5] focus:border-solid transition-colors font-medium text-lg w-full">` 
+              : `<div class="px-3 py-2 text-[#2D2A26] font-medium text-lg bg-gray-50 rounded-lg flex-grow border border-transparent shadow-sm">${item.text}</div>`
+            }
+          </div>
+        `).join('');
+
+        return `
+          <div class="max-w-3xl mx-auto">
+            <button onclick="actions.setView('catalog')" class="flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] mb-6 font-medium transition-colors">
+              <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
+            </button>
+            <div class="bg-white rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+              <div class="p-6 md:p-8 border-b border-[#E8E4DF] bg-gray-50/50">
+                <span class="text-sm font-bold uppercase tracking-wider text-[#F5A623] mb-2 flex items-center gap-1"><i class="ph ph-puzzle-piece text-lg"></i> Режим "Заполни пробелы"</span>
+                <h2 class="text-2xl md:text-3xl font-bold">${plan.topic}</h2>
+              </div>
+              <div class="flex-grow p-6 md:p-8 space-y-4">
+                <div class="mb-6 text-sm text-[#7A7570] bg-[#FAF7F2] p-4 rounded-xl border border-[#E8E4DF]">
+                   Впишите пропущенные термины или фразы по смыслу. Оценки выставляются так же лояльно, как и в классическом режиме.
+                </div>
+                <div class="space-y-4">${blanksHTML}</div>
+              </div>
+              <div class="p-6 border-t border-[#E8E4DF] bg-gray-50/50 flex justify-end">
+                <button onclick="actions.finishBlanks()" class="bg-[#F5A623] hover:bg-[#E09612] text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm flex items-center gap-2">
+                  <i class="ph-fill ph-check-circle text-xl"></i> Проверить
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (state.view === 'statistics') {
+        const sectionsHTML = ['Человек в обществе. Духовная культура', 'Экономическая жизнь общества', 'Социальная сфера', 'Политическая сфера', 'Правовое регулирование'].map(section => {
+          const sectionPlans = PLANS_DB.filter(p => p.section === section);
+          if (sectionPlans.length === 0) return '';
+          const learned = sectionPlans.filter(p => state.progress[p.id]?.status === 'mastered' || state.progress[p.id]?.status === 'almost').length;
+          const percent = Math.round((learned / sectionPlans.length) * 100);
+          return `
+            <div class="mb-4">
+              <div class="flex justify-between text-sm font-bold mb-1">
+                <span class="text-[#7A7570]">${section.split('.')[0]}</span>
+                <span class="text-[#4A90D9]">${learned} / ${sectionPlans.length} (${percent}%)</span>
+              </div>
+              <div class="w-full bg-[#FAF7F2] rounded-full h-3 overflow-hidden border border-[#E8E4DF]">
+                <div class="bg-[#4A90D9] h-3 rounded-full transition-all duration-1000" style="width: ${percent}%"></div>
+              </div>
+            </div>`;
+        }).join('');
+
+        const progressValues = Object.values(state.progress);
+        const avgScore = progressValues.length > 0 ? Math.round(progressValues.reduce((acc, p) => acc + p.bestScore, 0) / progressValues.length) : 0;
+
+        return `
+          <div class="max-w-4xl mx-auto">
+            <h2 class="text-3xl font-bold mb-6">Подробная статистика</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+               <div class="bg-white p-8 rounded-3xl border border-[#E8E4DF] shadow-sm flex flex-col justify-center items-center text-center">
+                  <div class="text-[#F5A623] mb-4"><i class="ph ph-medal text-5xl"></i></div>
+                  <h3 class="font-bold text-xl text-[#7A7570] mb-2">Общий средний балл</h3>
+                  <div class="text-6xl font-black text-[#2D2A26]">${avgScore}</div>
+               </div>
+               <div class="bg-white p-8 rounded-3xl border border-[#E8E4DF] shadow-sm">
+                 <h3 class="font-bold text-xl mb-6 text-[#2D2A26]">Изучение разделов</h3>
+                 ${sectionsHTML}
+               </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (state.view === 'comparison') {
+        const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
+        const res = state.comparisonResult;
+        
+        const referenceHTML = res.results.map((pm, idx) => `
+          <div class="border-l-4 pl-4 py-1" style="border-color: ${pm.matched ? '#5CB85C' : '#E74C3C'}">
+            <div class="flex items-start gap-2 cursor-pointer hover:bg-gray-100 p-1.5 -ml-1.5 rounded-lg transition-colors select-none group" onclick="actions.toggleMatch(${idx})" title="Кликните, чтобы изменить оценку пункта">
+              ${pm.matched ? '<i class="ph-fill ph-check-circle text-[#5CB85C] mt-0.5 shrink-0 group-hover:scale-110 transition-transform text-lg"></i>' : '<i class="ph-fill ph-x-circle text-[#E74C3C] mt-0.5 shrink-0 group-hover:scale-110 transition-transform text-lg"></i>'}
+              <span class="font-bold ${pm.matched ? 'text-[#2D2A26]' : 'text-[#7A7570]'}">${idx + 1}. ${pm.text}</span>
+            </div>
+            ${pm.subpoints.length > 0 ? `
+              <ul class="mt-2 space-y-1">
+                ${pm.subpoints.map((sm, subIdx) => `
+                  <li class="flex items-start gap-2 pl-6 p-1 -ml-1 rounded-lg select-none ${res.ignoreSubpoints ? '' : 'cursor-pointer hover:bg-gray-100 transition-colors group'}" ${!res.ignoreSubpoints ? `onclick="actions.toggleMatch(${idx}, ${subIdx})"` : ''}>
+                    ${res.ignoreSubpoints ? '<span class="text-[#7A7570] font-bold opacity-50">•</span>' : (sm.matched ? '<span class="text-[#5CB85C] font-bold group-hover:scale-125 transition-transform inline-block">✓</span>' : '<span class="text-[#E74C3C] font-bold opacity-50 group-hover:scale-125 transition-transform inline-block">✗</span>')}
+                    <span class="text-sm ${!res.ignoreSubpoints && sm.matched ? 'text-[#2D2A26]' : 'text-[#7A7570] opacity-80'}">${String.fromCharCode(1072 + subIdx)}) ${sm.text}</span>
+                  </li>
+                `).join('')}
+              </ul>
+            ` : ''}
+            ${pm.subpoints.length > 0 && res.ignoreSubpoints ? `<div class="mt-2 text-xs text-[#4A90D9] italic pl-6">* В блице подпункты показаны для справки</div>` : ''}
+          </div>
+        `).join('');
+
+        return `
+          <div id="comparison-report">
+             <div class="flex justify-between items-center mb-6 print-hidden">
+              <button onclick="actions.setView('catalog')" class="flex items-center gap-2 text-[#7A7570] hover:text-[#2D2A26] font-medium transition-colors">
+                <i class="ph ph-arrow-left text-lg"></i> Вернуться в каталог
+              </button>
+              ${res.isBlitz 
+                ? `<button onclick="actions.startBlitz()" class="flex items-center gap-2 bg-[#8E54E9] hover:bg-[#7a42d4] text-white font-bold px-6 py-2 rounded-lg transition-colors shadow-sm animate-pulse"><i class="ph-fill ph-lightning text-lg"></i> Следующий план Блица</button>` 
+                : `<button onclick="actions.printReport()" class="flex items-center gap-2 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-4 py-2 rounded-lg transition-colors"><i class="ph ph-camera text-lg"></i> Сохранить для учителя</button>`}
+            </div>
+
+            <div class="bg-white rounded-3xl border border-[#E8E4DF] p-8 mb-8 text-center shadow-sm relative">
+              <div class="absolute top-4 right-4 bg-blue-50 text-[#4A90D9] text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 animate-bounce print-hidden">
+                 <i class="ph ph-cursor-click text-lg"></i> Алгоритм ошибся? Кликайте на значки ✓ и ✗ ниже!
+              </div>
+              <h2 class="text-xl font-bold text-[#7A7570] mb-2">Ваш результат</h2>
+              <div class="text-6xl font-black text-[#2D2A26] mb-4 flex justify-center items-baseline gap-1">
+                <span class="${res.score >= 80 ? 'text-[#5CB85C]' : res.score >= 50 ? 'text-[#F5A623]' : 'text-[#E74C3C]'}">${res.score}</span>
+                <span class="text-3xl text-[#7A7570]">/100</span>
+              </div>
+              <p class="text-lg font-medium text-[#2D2A26]">Тема: «${plan.topic}»</p>
+              <p class="text-sm text-[#7A7570] mt-2 max-w-xl mx-auto print-hidden">Система использует нечёткое сравнение (алгоритм прощает синонимы и опечатки). Проверьте эталонный план ниже, чтобы закрепить материал.</p>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-[#E8E4DF] shadow-sm overflow-hidden">
+              <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-[#E8E4DF]">
+                <div class="p-6 md:p-8 bg-gray-50/30">
+                  <h3 class="font-bold text-lg mb-6 flex items-center gap-2 text-[#7A7570]">Ваш ответ</h3>
+                  <div class="font-mono text-[14px] leading-loose whitespace-pre-wrap text-[#2D2A26]">${state.userDraft || "Пустой ответ"}</div>
+                </div>
+                <div class="p-6 md:p-8">
+                  <h3 class="font-bold text-lg mb-6 flex items-center gap-2 text-[#5CB85C]">Эталонный план</h3>
+                  <div class="space-y-6">${referenceHTML}</div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-8 flex justify-center pb-10 print-hidden">
+               <button onclick="actions.setView('catalog')" class="bg-[#2D2A26] hover:bg-black text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-md">Вернуться и выбрать новый план</button>
+            </div>
+          </div>
+        `;
+      }
+      return '';
+    }
+
+    function getModalHTML() {
+      if (!state.modeSelectorId) return '';
+      return `
+        <div class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+          <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-[#E8E4DF]">
+            <div class="p-6 border-b border-[#E8E4DF] flex justify-between items-center bg-gray-50/50">
+              <h3 class="text-xl font-bold">Выберите режим тренировки</h3>
+              <button onclick="actions.closeModal()" class="text-[#7A7570] hover:text-[#E74C3C] transition-colors"><i class="ph ph-x text-2xl"></i></button>
+            </div>
+            <div class="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button onclick="actions.startTraining(${state.modeSelectorId}, 'classic')" class="text-left p-6 rounded-2xl border-2 border-[#E8E4DF] hover:border-[#4A90D9] hover:bg-[#4A90D9]/5 transition-all group">
+                <div class="bg-[#4A90D9]/10 text-[#4A90D9] w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <i class="ph ph-pen-nib text-3xl"></i>
+                </div>
+                <h4 class="font-bold text-lg mb-2">Написать с нуля</h4>
+                <p class="text-sm text-[#7A7570]">Классический Active Recall. Пустой лист, максимальная эффективность для мозга.</p>
+              </button>
+
+              <button onclick="actions.startTraining(${state.modeSelectorId}, 'blanks')" class="text-left p-6 rounded-2xl border-2 border-[#E8E4DF] hover:border-[#F5A623] hover:bg-[#F5A623]/5 transition-all group">
+                <div class="bg-[#F5A623]/10 text-[#F5A623] w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <i class="ph ph-puzzle-piece text-3xl"></i>
+                </div>
+                <h4 class="font-bold text-lg mb-2">Заполнить пробелы</h4>
+                <p class="text-sm text-[#7A7570]">Часть пунктов скрыта. Отличный вариант для начального этапа заучивания темы.</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- 6. ОТРИСОВКА (RENDER) ---
+    function render() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        ${getHeaderHTML()}
+        <main class="max-w-5xl mx-auto px-6 mt-8" id="main-content">
+           ${getViewHTML()}
+        </main>
+        ${getModalHTML()}
+      `;
+      
+      // Восстанавливаем фокус для текстовых полей, чтобы не сбивался при рендере
+      if(state.view === 'training' || state.view === 'blitz') {
+        const ta = document.getElementById('draft-area');
+        if(ta) {
+            ta.focus();
+            ta.setSelectionRange(ta.value.length, ta.value.length);
+        }
+      }
+    }
+
+    // Инициализация при загрузке
+    const initApp = () => {
+      const today = getTodayStr();
+      if (state.streak.lastActive !== today && state.streak.lastActive !== null) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (state.streak.lastActive !== yesterday.toISOString().split('T')[0]) {
+           state.streak.count = 0; 
+        }
+      }
+      render();
+    };
+
+    initApp();
+
+  </script>
+</body>
+</html>
