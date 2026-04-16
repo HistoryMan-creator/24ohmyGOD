@@ -587,6 +587,7 @@
 
             let isPointMatched = bestScore >= THRESHOLD;
             
+            // Если совпало 3 подпункта (или все, если их меньше), засчитываем весь пункт
             if (!ignoreSubpoints && (bestSubpointsMatchCount >= 3 || (refPoint.subpoints.length > 0 && bestSubpointsMatchCount === refPoint.subpoints.length))) {
               isPointMatched = true;
             }
@@ -659,6 +660,7 @@
           expandedTemplate: null,
           expandedDay: null,
           viewTemplateModal: null,
+          imageModalData: null, // Для мобильного окна "Поделиться"
           blanksData: [],
           timeLeft: 60,
           timerRef: null,
@@ -774,6 +776,11 @@
             try {
               if (state.authMode === 'login') await signInWithEmailAndPassword(auth, email, password);
               else await createUserWithEmailAndPassword(auth, email, password);
+              
+              // ИСПРАВЛЕНИЕ ДОЛГОЙ ЗАГРУЗКИ: моментальный перевод на дашборд
+              window.scrollTo(0,0);
+              state.view = 'dashboard';
+              render();
             } catch(e) {
               let msg = "Произошла ошибка.";
               if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') msg = "Неверный email или пароль.";
@@ -794,6 +801,9 @@
               localStorage.setItem('ege_plan_time_stats', JSON.stringify(state.timeStats));
               saveProgressToCloud();
             }
+            // ИСПРАВЛЕНИЕ: Очищаем таймер блица при любом уходе с экрана, чтобы он сам не закрывался
+            clearInterval(state.timerRef); 
+            
             window.scrollTo(0,0); 
             state.view = v; 
             render(); 
@@ -868,6 +878,16 @@
             render();
           },
 
+          showImageModal: (dataUrl) => {
+            state.imageModalData = dataUrl;
+            render();
+          },
+
+          closeImageModal: () => {
+            state.imageModalData = null;
+            render();
+          },
+
           studyRandomPlanFromTemplate: (templateId) => {
              const validIds = Object.keys(PLAN_TO_TEMPLATE).filter(id => PLAN_TO_TEMPLATE[id] === templateId).map(Number);
              let pool = PLANS_DB.filter(p => validIds.includes(p.id));
@@ -887,6 +907,7 @@
             state.selectedPlanId = id;
             state.modeSelectorId = null;
             state.comparisonResult = null;
+            clearInterval(state.timerRef); // На всякий случай очищаем таймер
 
             if (mode === 'study') {
               state.view = 'study';
@@ -937,6 +958,12 @@
 
             clearInterval(state.timerRef);
             state.timerRef = setInterval(() => {
+              // Если мы ушли с экрана блица - жестко останавливаем таймер
+              if (state.view !== 'blitz') {
+                 clearInterval(state.timerRef);
+                 return;
+              }
+              
               if (state.timeLeft > 0) {
                 state.timeLeft--;
                 const timerEl = document.getElementById('blitz-timer');
@@ -1053,6 +1080,19 @@
             btn.innerHTML = '<i class="ph ph-spinner-gap animate-spin text-lg"></i> Обработка...';
             btn.disabled = true;
 
+            const resetBtn = () => {
+              btn.innerHTML = originalHTML;
+              btn.disabled = false;
+              btn.className = "flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-3 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base border border-transparent";
+            };
+
+            const finishSuccess = (text) => {
+              btn.innerHTML = `<i class="ph-fill ph-check-circle text-lg text-white"></i> ${text}`;
+              btn.classList.remove('bg-[#4A90D9]/10', 'text-[#4A90D9]', 'hover:bg-[#4A90D9]/20');
+              btn.classList.add('bg-[#5CB85C]', 'text-white', 'border-transparent');
+              setTimeout(resetBtn, 3000);
+            };
+
             try {
               const target = document.getElementById('screenshot-target');
               const clone = target.cloneNode(true);
@@ -1065,34 +1105,44 @@
               document.body.appendChild(clone);
 
               const canvas = await html2canvas(clone, { 
-                scale: 2, 
+                scale: window.devicePixelRatio > 1 ? 2 : 1, // Оптимизация для мобильных
                 backgroundColor: '#FAF7F2', 
                 useCORS: true
               });
               
               document.body.removeChild(clone);
+              
+              const dataUrl = canvas.toDataURL('image/png');
 
               canvas.toBlob(async (blob) => {
-                const finishSuccess = (text) => {
-                  btn.innerHTML = `<i class="ph-fill ph-check-circle text-lg text-white"></i> ${text}`;
-                  btn.classList.remove('bg-[#4A90D9]/10', 'text-[#4A90D9]', 'hover:bg-[#4A90D9]/20');
-                  btn.classList.add('bg-[#5CB85C]', 'text-white', 'border-transparent');
-                };
-
-                try {
-                  const file = new File([blob], 'plan_result.png', { type: 'image/png' });
-                  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                const file = new File([blob], 'plan_result.png', { type: 'image/png' });
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                
+                // 1. Попытка вызова системного окна Поделиться (Web Share API)
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                  try {
                     await navigator.share({
                       files: [file],
-                      title: 'Результат проверки плана',
+                      title: 'Результат проверки плана'
                     });
                     finishSuccess('Отправлено!');
-                    return;
+                    return; // Успешно поделились, выходим
+                  } catch (shareErr) {
+                    console.warn("Share API отменен или недоступен", shareErr);
+                    // Ошибка может быть, если пользователь сам закрыл окно, либо браузер запрещает.
+                    // Если мы на телефоне, лучше показать модалку, так как буфер обмена не удобен.
                   }
-                } catch (shareErr) {
-                   console.warn("Share API недоступен", shareErr);
                 }
 
+                // 2. Если Share недоступен или выдал ошибку на телефоне (часто в Telegram Webview)
+                // Открываем картинку прямо поверх экрана, чтобы ученик зажал её пальцем
+                if (isMobile) {
+                   actions.showImageModal(dataUrl);
+                   finishSuccess('Готово!');
+                   return;
+                }
+
+                // 3. Для ПК - пытаемся скопировать в буфер
                 try {
                   const item = new ClipboardItem({ 'image/png': blob });
                   await navigator.clipboard.write([item]);
@@ -1107,16 +1157,11 @@
                   URL.revokeObjectURL(url);
                   finishSuccess('Сохранено!');
                 }
-                
-                setTimeout(() => {
-                  btn.innerHTML = originalHTML;
-                  btn.disabled = false;
-                  btn.className = "w-full sm:w-auto flex items-center justify-center gap-1.5 text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 font-bold px-3 py-2.5 md:py-2 rounded-xl md:rounded-lg transition-all text-sm md:text-base border border-transparent";
-                }, 3000);
               }, 'image/png');
             } catch (err) {
+              console.error(err);
               btn.innerHTML = '<i class="ph ph-warning-circle text-lg"></i> Ошибка';
-              setTimeout(() => { btn.innerHTML = originalHTML; btn.disabled = false; }, 3000);
+              setTimeout(resetBtn, 3000);
             }
           }
         };
@@ -1854,6 +1899,33 @@
           `;
         }
 
+        // НОВОЕ МОДАЛЬНОЕ ОКНО ДЛЯ КАРТИНКИ (ФОЛБЭК ДЛЯ ТЕЛЕФОНОВ)
+        function getImageModalHTML() {
+          if (!state.imageModalData) return '';
+          return `
+            <div class="fixed inset-0 bg-black/90 z-[200] flex flex-col items-center justify-center p-4 backdrop-blur-sm transition-opacity" onclick="actions.closeImageModal()">
+              <div class="bg-white rounded-2xl md:rounded-3xl shadow-2xl max-w-lg w-full flex flex-col max-h-[90vh] overflow-hidden" onclick="event.stopPropagation()">
+                <div class="p-4 border-b border-[#E8E4DF] flex justify-between items-center bg-gray-50/50 shrink-0">
+                  <h3 class="font-bold text-lg text-[#2D2A26]">Отправка отчёта</h3>
+                  <button onclick="actions.closeImageModal()" class="text-[#7A7570] hover:text-[#E74C3C] transition-colors p-1"><i class="ph ph-x text-xl"></i></button>
+                </div>
+                <div class="p-4 overflow-y-auto custom-scroll flex-grow text-center flex flex-col items-center bg-[#FAF7F2]">
+                  <div class="bg-blue-50 text-[#4A90D9] p-3 rounded-xl border border-blue-100 text-sm font-bold mb-4 w-full flex items-center justify-center gap-2">
+                     <i class="ph-fill ph-hand-tap text-lg"></i> Удерживайте картинку пальцем
+                  </div>
+                  <p class="text-xs text-[#7A7570] mb-4">Появится системное меню телефона, чтобы сохранить её в галерею или переслать учителю в Telegram/WhatsApp.</p>
+                  
+                  <img src="${state.imageModalData}" class="max-w-full h-auto rounded-xl shadow-md border border-[#E8E4DF] select-none" alt="Скриншот отчёта">
+                  
+                </div>
+                <div class="p-4 bg-gray-50/50 border-t border-[#E8E4DF]">
+                   <button onclick="actions.closeImageModal()" class="w-full bg-[#2D2A26] text-white font-bold py-3 rounded-xl hover:bg-black transition-colors shadow-sm">Закрыть</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
         function getModalHTML() {
           if (!state.modeSelectorId) return '';
           return `
@@ -1911,6 +1983,7 @@
             </main>
             ${getModalHTML()}
             ${getTemplateModalHTML()}
+            ${getImageModalHTML()}
           `;
         }
 
@@ -1958,6 +2031,11 @@
               if (user) {
                 currentUser = user;
                 await loadUserData();
+                
+                // ИСПРАВЛЕНИЕ ЗАВИСАНИЯ АВТОРИЗАЦИИ ПРИ ВХОДЕ ЧЕРЕЗ SESSION
+                if (state.view === 'auth') {
+                  state.view = 'dashboard';
+                }
                 render();
               } else {
                 currentUser = null;
