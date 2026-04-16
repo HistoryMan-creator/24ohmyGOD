@@ -653,7 +653,7 @@
           authMode: 'login',
           searchQuery: '',
           selectedBlock: 'all',
-          selectedTemplate: 'all', // НОВОЕ: фильтр по шаблону
+          selectedTemplate: 'all',
           selectedPlanId: null,
           userDraft: '',
           comparisonResult: null,
@@ -665,9 +665,9 @@
           blanksData: [],
           timeLeft: 60,
           timerRef: null,
-          playlist: [], // НОВОЕ: Очередь планов
-          playlistIndex: 0, // НОВОЕ: Текущий план в очереди
-          currentTrainingMode: 'classic', // НОВОЕ: Запоминаем текущий режим для серии
+          playlist: [], 
+          playlistIndex: 0, 
+          currentTrainingMode: 'classic',
           progress: JSON.parse(localStorage.getItem('ege_plan_progress') || '{}'),
           streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}'),
           timeStats: JSON.parse(localStorage.getItem('ege_plan_time_stats') || '{}')
@@ -781,7 +781,6 @@
               if (state.authMode === 'login') await signInWithEmailAndPassword(auth, email, password);
               else await createUserWithEmailAndPassword(auth, email, password);
               
-              // ИСПРАВЛЕНИЕ ДОЛГОЙ ЗАГРУЗКИ: моментальный перевод на дашборд
               window.scrollTo(0,0);
               state.view = 'dashboard';
               render();
@@ -805,7 +804,7 @@
               localStorage.setItem('ege_plan_time_stats', JSON.stringify(state.timeStats));
               saveProgressToCloud();
             }
-            // ИСПРАВЛЕНИЕ: Очищаем таймер блица при любом уходе с экрана, чтобы он сам не закрывался
+            
             clearInterval(state.timerRef); 
             
             window.scrollTo(0,0); 
@@ -906,7 +905,6 @@
              let unmastered = pool.filter(p => !state.progress[p.id] || state.progress[p.id].status !== 'mastered');
              if (unmastered.length === 0) unmastered = pool;
 
-             // Перемешиваем планы внутри серии
              unmastered.sort(() => Math.random() - 0.5);
 
              state.playlist = unmastered.map(p => p.id);
@@ -947,7 +945,6 @@
             state.currentTrainingMode = mode;
             clearInterval(state.timerRef);
 
-            // Если пользователь запустил другой план вручную, сбрасываем текущую серию
             if (state.playlist.length > 0 && id !== state.playlist[state.playlistIndex]) {
                state.playlist = [];
             }
@@ -1001,7 +998,6 @@
 
             clearInterval(state.timerRef);
             state.timerRef = setInterval(() => {
-              // Если мы ушли с экрана блица - жестко останавливаем таймер
               if (state.view !== 'blitz') {
                  clearInterval(state.timerRef);
                  return;
@@ -1602,6 +1598,13 @@
           if (state.view === 'study') {
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
             const hasNextInPlaylist = state.playlist.length > 0 && state.playlistIndex < state.playlist.length - 1;
+            
+            const templateId = PLAN_TO_TEMPLATE[plan.id];
+            const template = templateId ? TEMPLATES.find(t => t.id === templateId) : null;
+
+            let templateBannerHTML = '';
+            if (template) {
+              templateBannerHTML = `
                 <div class="mb-5 bg-[#FFF9F0] p-4 rounded-2xl border border-[#F5A623]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
                   <div>
                     <span class="text-[10px] font-bold text-[#F5A623] uppercase tracking-wider mb-1 block">Умная подготовка</span>
