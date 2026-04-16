@@ -54,11 +54,11 @@
 <body class="bg-[#FAF7F2] text-[#2D2A26] selection:bg-[#4A90D9] selection:text-white h-screen w-screen flex flex-col overflow-hidden">
 
   <div id="app" class="flex-grow flex flex-col h-full overflow-hidden">
-    <!-- Заглушка загрузки -->
+    <!-- Заглушка загрузки (отображается доли секунды, пока грузится база данных) -->
     <div class="flex-grow flex items-center justify-center">
       <div class="animate-pulse flex flex-col items-center">
         <i class="ph ph-spinner-gap animate-spin text-4xl text-[#4A90D9] mb-4"></i>
-        <p class="text-[#7A7570] font-bold">Загрузка приложения...</p>
+        <p class="text-[#7A7570] font-bold">Инициализация...</p>
       </div>
     </div>
   </div>
@@ -279,7 +279,8 @@
 
         // --- 5. ГЛОБАЛЬНОЕ СОСТОЯНИЕ ---
         const state = {
-          view: 'loading',
+          view: 'dashboard', // Сразу открываем дашборд
+          isAuthReady: false, // Флаг для фоновой загрузки Firebase
           authMode: 'login',
           searchQuery: '',
           selectedBlock: 'all',
@@ -290,6 +291,7 @@
           blanksData: [],
           timeLeft: 60,
           timerRef: null,
+          // Сразу загружаем локальные данные из localStorage
           progress: JSON.parse(localStorage.getItem('ege_plan_progress') || '{}'),
           streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}')
         };
@@ -691,10 +693,25 @@
         // --- 8. ГЕНЕРАЦИЯ HTML ИНТЕРФЕЙСА ---
 
         function getHeaderHTML() {
-          if (state.view === 'loading') return '';
-
-          // Если мы на экране авторизации, прячем кнопки меню, оставляем только логотип и Возврат
           if (state.view === 'auth') return '';
+
+          let authSectionHTML = '';
+          if (!state.isAuthReady) {
+            // Скелетон загрузки
+            authSectionHTML = `<div class="animate-pulse w-[80px] md:w-[100px] h-[34px] md:h-[38px] bg-gray-200 rounded-lg"></div>`;
+          } else if (currentUser) {
+            authSectionHTML = `
+              <button onclick="actions.logout()" class="text-[#7A7570] hover:text-[#E74C3C] bg-gray-50 hover:bg-red-50 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1" title="Выйти">
+                <i class="ph ph-sign-out text-lg"></i>
+              </button>
+            `;
+          } else {
+            authSectionHTML = `
+              <button onclick="actions.setView('auth')" class="text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1.5" title="Войти или зарегистрироваться">
+                <i class="ph-bold ph-user text-lg"></i> <span class="hidden sm:inline">Войти</span>
+              </button>
+            `;
+          }
 
           return `
             <header class="bg-white border-b border-[#E8E4DF] shrink-0 print-hidden shadow-sm">
@@ -724,15 +741,7 @@
                     <i class="ph-fill ph-fire text-lg ${state.streak.count > 0 ? 'text-[#F5A623]' : 'text-gray-300'}"></i> ${state.streak.count}
                   </div>
                   
-                  ${currentUser ? `
-                    <button onclick="actions.logout()" class="text-[#7A7570] hover:text-[#E74C3C] bg-gray-50 hover:bg-red-50 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1" title="Выйти">
-                      <i class="ph ph-sign-out text-lg"></i>
-                    </button>
-                  ` : `
-                    <button onclick="actions.setView('auth')" class="text-[#4A90D9] bg-[#4A90D9]/10 hover:bg-[#4A90D9]/20 px-2 md:px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1.5" title="Войти или зарегистрироваться">
-                      <i class="ph-bold ph-user text-lg"></i> <span class="hidden sm:inline">Войти</span>
-                    </button>
-                  `}
+                  ${authSectionHTML}
                   
                 </div>
               </div>
@@ -790,17 +799,6 @@
         };
 
         function getViewHTML() {
-          if (state.view === 'loading') {
-            return `
-              <div class="flex-grow flex items-center justify-center min-h-[60vh]">
-                <div class="animate-pulse flex flex-col items-center">
-                  <i class="ph ph-spinner-gap animate-spin text-4xl text-[#4A90D9] mb-4"></i>
-                  <p class="text-[#7A7570] font-bold">Подключение...</p>
-                </div>
-              </div>
-            `;
-          }
-
           if (state.view === 'auth') {
             return `
               <div class="flex-grow flex items-center justify-center px-4 min-h-[70vh] w-full relative">
@@ -1256,43 +1254,44 @@
 
         // Инициализация при загрузке
         const initApp = () => {
+          // 1. Локальная проверка серии дней для мгновенного рендера
+          const today = getTodayStr();
+          if (state.streak.lastActive !== today && state.streak.lastActive !== null) {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (state.streak.lastActive !== yesterday.toISOString().split('T')[0]) {
+               state.streak.count = 0; 
+               localStorage.setItem('ege_plan_streak', JSON.stringify(state.streak));
+            }
+          }
+          
+          // 2. МГНОВЕННЫЙ РЕНДЕР ИНТЕРФЕЙСА (Оффлайн/Локально)
+          state.view = 'dashboard';
+          render();
+
+          // 3. ФОНОВОЕ ПОДКЛЮЧЕНИЕ FIREBASE И СИНХРОНИЗАЦИЯ
           const initAuth = async () => {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await signInWithCustomToken(auth, __initial_auth_token);
+              await signInWithCustomToken(auth, __initial_auth_token).catch(console.warn);
             }
           };
 
           initAuth().then(() => {
             onAuthStateChanged(auth, async (user) => {
+              state.isAuthReady = true;
               if (user) {
                 currentUser = user;
-                await loadUserData();
-                
-                const today = getTodayStr();
-                if (state.streak.lastActive !== today && state.streak.lastActive !== null) {
-                  const yesterday = new Date();
-                  yesterday.setDate(yesterday.getDate() - 1);
-                  if (state.streak.lastActive !== yesterday.toISOString().split('T')[0]) {
-                     state.streak.count = 0; 
-                     saveProgressToCloud();
-                  }
-                }
-                
-                if (state.view === 'loading' || state.view === 'auth') {
-                  state.view = 'dashboard';
-                }
-                render();
+                await loadUserData(); // подтягивает данные и обновляет state (слияние)
+                render(); // перерисовываем с актуальными облачными данными
               } else {
                 currentUser = null;
-                if (state.view === 'loading') {
-                  state.view = 'dashboard';
-                }
-                render();
+                render(); // перерисовываем, чтобы показать кнопку "Войти"
               }
             });
           }).catch(err => {
-             console.error(err);
-             showErrorUI(err.message);
+             console.error("Фоновая ошибка Firebase:", err);
+             state.isAuthReady = true;
+             render();
           });
         };
 
