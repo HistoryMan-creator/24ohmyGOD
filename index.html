@@ -413,19 +413,24 @@
       }
     ];
 
-    // АВТОМАТИЧЕСКИЙ МАППИНГ ID ПЛАНА -> ID ШАБЛОНА
+    // АВТОМАТИЧЕСКИЙ МАППИНГ ID ПЛАНА -> МАССИВ ID ШАБЛОНОВ (ИСПРАВЛЕНО)
+    // Теперь один план может принадлежать нескольким шаблонам одновременно.
     const PLAN_TO_TEMPLATE = {};
     TEMPLATES.forEach(t => {
       t.plans.forEach(p => {
+        const addId = (id) => {
+           if (!PLAN_TO_TEMPLATE[id]) PLAN_TO_TEMPLATE[id] = [];
+           if (!PLAN_TO_TEMPLATE[id].includes(t.id)) PLAN_TO_TEMPLATE[id].push(t.id);
+        };
         const rangeMatch = p.nums.match(/№(\d+)[–-](\d+)/); // Ищем диапазон (например, №24-25)
         if (rangeMatch) {
           for (let i = parseInt(rangeMatch[1]); i <= parseInt(rangeMatch[2]); i++) {
-             if (!PLAN_TO_TEMPLATE[i]) PLAN_TO_TEMPLATE[i] = t.id;
+             addId(i);
           }
         } else {
           const singleMatch = p.nums.match(/№(\d+)/); // Ищем одно число (например, №12)
           if (singleMatch) {
-             if (!PLAN_TO_TEMPLATE[parseInt(singleMatch[1])]) PLAN_TO_TEMPLATE[parseInt(singleMatch[1])] = t.id;
+             addId(parseInt(singleMatch[1]));
           }
         }
       });
@@ -897,7 +902,7 @@
           },
 
           startTemplatePlaylist: (templateId) => {
-             const validIds = Object.keys(PLAN_TO_TEMPLATE).filter(id => PLAN_TO_TEMPLATE[id] === templateId).map(Number);
+             const validIds = Object.keys(PLAN_TO_TEMPLATE).filter(id => PLAN_TO_TEMPLATE[id].includes(templateId)).map(Number);
              let pool = PLANS_DB.filter(p => validIds.includes(p.id));
 
              if (pool.length === 0) return;
@@ -924,7 +929,7 @@
           },
 
           studyRandomPlanFromTemplate: (templateId) => {
-             const validIds = Object.keys(PLAN_TO_TEMPLATE).filter(id => PLAN_TO_TEMPLATE[id] === templateId).map(Number);
+             const validIds = Object.keys(PLAN_TO_TEMPLATE).filter(id => PLAN_TO_TEMPLATE[id].includes(templateId)).map(Number);
              let pool = PLANS_DB.filter(p => validIds.includes(p.id));
 
              if (pool.length === 0) return;
@@ -1168,20 +1173,17 @@
                     return; // Успешно поделились, выходим
                   } catch (shareErr) {
                     console.warn("Share API отменен или недоступен", shareErr);
-                    // Ошибка может быть, если пользователь сам закрыл окно, либо браузер запрещает.
-                    // Если мы на телефоне, лучше показать модалку, так как буфер обмена не удобен.
                   }
                 }
 
-                // 2. Если Share недоступен или выдал ошибку на телефоне (часто в Telegram Webview)
-                // Открываем картинку прямо поверх экрана, чтобы ученик зажал её пальцем
+                // 2. Фолбэк для телефонов
                 if (isMobile) {
                    actions.showImageModal(dataUrl);
                    finishSuccess('Готово!');
                    return;
                 }
 
-                // 3. Для ПК - пытаемся скопировать в буфер
+                // 3. Для ПК - копируем в буфер
                 try {
                   const item = new ClipboardItem({ 'image/png': blob });
                   await navigator.clipboard.write([item]);
@@ -1302,7 +1304,8 @@
           const query = state.searchQuery.toLowerCase();
           const filtered = PLANS_DB.filter(plan => {
             if (state.selectedBlock !== 'all' && plan.section !== state.selectedBlock) return false;
-            if (state.selectedTemplate !== 'all' && PLAN_TO_TEMPLATE[plan.id] !== state.selectedTemplate) return false;
+            // ИСПРАВЛЕНИЕ ДЛЯ ФИЛЬТРА: Теперь проверяем вхождение в массив
+            if (state.selectedTemplate !== 'all' && (!PLAN_TO_TEMPLATE[plan.id] || !PLAN_TO_TEMPLATE[plan.id].includes(state.selectedTemplate))) return false;
             if (!query) return true;
             return plan.topic.toLowerCase().includes(query) || plan.aliases.some(a => a.toLowerCase().includes(query));
           });
@@ -1599,7 +1602,14 @@
             const plan = PLANS_DB.find(p => p.id === state.selectedPlanId);
             const hasNextInPlaylist = state.playlist.length > 0 && state.playlistIndex < state.playlist.length - 1;
             
-            const templateId = PLAN_TO_TEMPLATE[plan.id];
+            // ИСПРАВЛЕНИЕ: Выбираем шаблон для баннера
+            const templateIds = PLAN_TO_TEMPLATE[plan.id] || [];
+            let templateId = null;
+            if (templateIds.length > 0) {
+               templateId = (state.selectedTemplate !== 'all' && templateIds.includes(state.selectedTemplate)) 
+                            ? state.selectedTemplate 
+                            : templateIds[0];
+            }
             const template = templateId ? TEMPLATES.find(t => t.id === templateId) : null;
 
             let templateBannerHTML = '';
@@ -1938,7 +1948,7 @@
           return '';
         }
 
-        // МОДАЛКА ШАБЛОНА
+        // МОДАЛКА ШАБЛОНА (ВОЗВРАЩЕНА)
         function getTemplateModalHTML() {
           if (!state.viewTemplateModal) return '';
           const template = TEMPLATES.find(t => t.id === state.viewTemplateModal);
