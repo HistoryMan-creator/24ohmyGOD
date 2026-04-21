@@ -62,6 +62,9 @@
     </div>
   </div>
 
+  <!-- Аудиоплеер для фоновой музыки -->
+  <audio id="bg-music" loop preload="none" src="./matadora.mp3"></audio>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -673,6 +676,7 @@
           playlist: [], 
           playlistIndex: 0, 
           currentTrainingMode: 'classic',
+          isMusicPlaying: false, // Музыкальный проигрыватель
           progress: JSON.parse(localStorage.getItem('ege_plan_progress') || '{}'),
           streak: JSON.parse(localStorage.getItem('ege_plan_streak') || '{"count": 0, "lastActive": null}'),
           timeStats: JSON.parse(localStorage.getItem('ege_plan_time_stats') || '{}')
@@ -767,6 +771,20 @@
 
         // --- 7. ДЕЙСТВИЯ (ACTIONS) ---
         window.actions = {
+          toggleMusic: () => {
+            const audio = document.getElementById('bg-music');
+            if (!audio) return;
+            if (state.isMusicPlaying) {
+              audio.pause();
+              state.isMusicPlaying = false;
+            } else {
+              audio.volume = 0.5; // Сделаем громкость 50%, чтобы не отвлекало
+              audio.play().catch(err => console.warn("Аудио заблокировано браузером до первого клика", err));
+              state.isMusicPlaying = true;
+            }
+            render();
+          },
+
           toggleAuthMode: () => {
             state.authMode = state.authMode === 'login' ? 'register' : 'login';
             render();
@@ -1259,7 +1277,11 @@
                   </nav>
                 </div>
                 <div class="flex items-center gap-2 md:gap-4 text-sm font-medium shrink-0 ml-4">
-                  <div class="flex items-center gap-1 bg-[#FFF0E5] text-[#F5A623] px-2 md:px-3 py-1.5 rounded-lg font-bold" title="Серия дней">
+                  <button onclick="actions.toggleMusic()" class="${state.isMusicPlaying ? 'bg-purple-100 text-purple-600 border border-purple-200' : 'bg-[#FAF7F2] text-[#7A7570] border border-[#E8E4DF] hover:bg-white'} px-2 md:px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-sm" title="Включить MA3TADORA">
+                    ${state.isMusicPlaying ? '<i class="ph-fill ph-speaker-high text-lg animate-pulse"></i>' : '<i class="ph-fill ph-music-notes text-lg"></i>'}
+                    <span class="hidden sm:inline text-xs uppercase tracking-wider">Матадора</span>
+                  </button>
+                  <div class="flex items-center gap-1 bg-[#FFF0E5] text-[#F5A623] px-2 md:px-3 py-1.5 rounded-xl font-bold border border-[#F5A623]/20 shadow-sm" title="Серия дней">
                     <i class="ph-fill ph-fire text-lg ${state.streak.count > 0 ? 'text-[#F5A623]' : 'text-gray-300'}"></i> ${state.streak.count}
                   </div>
                   ${authSectionHTML}
@@ -1948,7 +1970,7 @@
           return '';
         }
 
-        // МОДАЛКА ШАБЛОНА (ВОЗВРАЩЕНА)
+        // МОДАЛКА ШАБЛОНА
         function getTemplateModalHTML() {
           if (!state.viewTemplateModal) return '';
           const template = TEMPLATES.find(t => t.id === state.viewTemplateModal);
