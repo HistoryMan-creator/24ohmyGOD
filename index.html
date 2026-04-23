@@ -745,27 +745,43 @@
           return { count: 0, lastActive: null };
         }
 
-        // Умное слияние двух объектов прогресса по планам
+        // Умное слияние двух объектов прогресса по планам с защитой от поврежденных данных
         function mergeProgress(local, cloud) {
-          const merged = { ...cloud };
-          for (const key in local) {
-            const l = local[key];
-            const c = merged[key];
-            if (!c) { merged[key] = l; continue; }
-            // Берём лучшее из каждого поля, никогда не уменьшаем
-            const bestScore   = Math.max(l.bestScore  || 0, c.bestScore  || 0);
-            const attempts    = Math.max(l.attempts   || 0, c.attempts   || 0);
-            const lastAttempt = (l.lastAttempt || '') > (c.lastAttempt || '') ? l.lastAttempt : c.lastAttempt;
-            // lastScore и nextReview берём от той попытки, что была позже
-            const fromNewer   = (l.lastAttempt || '') >= (c.lastAttempt || '') ? l : c;
-            merged[key] = {
-              attempts,
-              bestScore,
-              lastAttempt,
-              lastScore:  fromNewer.lastScore,
-              nextReview: fromNewer.nextReview,
-              status: bestScore >= 90 && attempts >= 3 ? 'mastered' : bestScore >= 70 ? 'almost' : 'learning'
-            };
+          const merged = {};
+          
+          // 1. Копируем валидные данные из облака
+          if (cloud && typeof cloud === 'object') {
+            for (const key in cloud) {
+              const c = cloud[key];
+              if (c && typeof c === 'object' && 'bestScore' in c) {
+                merged[key] = c;
+              }
+            }
+          }
+          
+          // 2. Сливаем с локальными
+          if (local && typeof local === 'object') {
+            for (const key in local) {
+              const l = local[key];
+              if (!l || typeof l !== 'object' || !('bestScore' in l)) continue;
+              
+              const c = merged[key];
+              if (!c) { merged[key] = l; continue; }
+              
+              const bestScore   = Math.max(l.bestScore  || 0, c.bestScore  || 0);
+              const attempts    = Math.max(l.attempts   || 0, c.attempts   || 0);
+              const lastAttempt = (l.lastAttempt || '') > (c.lastAttempt || '') ? l.lastAttempt : c.lastAttempt;
+              const fromNewer   = (l.lastAttempt || '') >= (c.lastAttempt || '') ? l : c;
+              
+              merged[key] = {
+                attempts,
+                bestScore,
+                lastAttempt,
+                lastScore:  fromNewer.lastScore || 0,
+                nextReview: fromNewer.nextReview || '',
+                status: bestScore >= 90 && attempts >= 3 ? 'mastered' : bestScore >= 70 ? 'almost' : 'learning'
+              };
+            }
           }
           return merged;
         }
@@ -904,7 +920,17 @@
             }
           },
 
-          logout: async () => { await signOut(auth); },
+          logout: async () => { 
+            await signOut(auth); 
+            // Очищаем локальные данные при выходе, чтобы они не смешались с другим аккаунтом
+            state.progress = {};
+            state.streak = { count: 0, lastActive: null };
+            state.timeStats = {};
+            localStorage.removeItem('ege_plan_progress');
+            localStorage.removeItem('ege_plan_streak');
+            localStorage.removeItem('ege_plan_time_stats');
+            actions.setView('dashboard');
+          },
           
           setView: (v) => { 
             if (['study', 'training', 'training_blanks', 'blitz'].includes(state.view) && !['study', 'training', 'training_blanks', 'blitz'].includes(v)) {
@@ -1885,8 +1911,8 @@
                 </div>`;
             }).join('');
 
-            const progressValues = Object.values(state.progress);
-            const avgScore = progressValues.length > 0 ? Math.round(progressValues.reduce((acc, p) => acc + p.bestScore, 0) / progressValues.length) : 0;
+            const progressValues = Object.values(state.progress).filter(p => p && typeof p === 'object' && 'bestScore' in p);
+            const avgScore = progressValues.length > 0 ? Math.round(progressValues.reduce((acc, p) => acc + (p.bestScore || 0), 0) / progressValues.length) : 0;
 
             const todayStr = getTodayStr();
             const todayTime = formatTime(state.timeStats[todayStr] || 0);
